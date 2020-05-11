@@ -151,7 +151,7 @@ Then I was able to compile Telnet by running `wmake` from the
 `~/dos/MTCP/APPS/TELNET` directory.
 
 [ansi.src]: https://github.com/jhpyle/mTCP/blob/master/ansi.src
-[MAKEFILE]: https://github.com/jhpyle/mTCP/blob/master/APPS/TELNET/MAKEFILE
-[TELNET.EXE]: https://github.com/jhpyle/mTCP/blob/master/APPS/TELNET/TELNET.EXE
+[MAKEFILE]: https://github.com/jhpyle/mTCP/blob/master/MTCP/APPS/TELNET/MAKEFILE
+[TELNET.EXE]: https://github.com/jhpyle/mTCP/blob/master/MTCP/APPS/TELNET/TELNET.EXE
 [mTCP]: https://www.brutman.com/
 [ansi.el]: https://github.com/jhpyle/mTCP/blob/master/ansi.el
