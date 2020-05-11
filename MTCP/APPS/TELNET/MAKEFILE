@@ -31,7 +31,7 @@ common_h_dir = ..\..\INCLUDE
 
 memory_model = -ml
 compile_options = -0 $(memory_model) -DCFG_H="telnet.cfg" -oh -ok -ot -s -oa -ei -zp2 -zpw -we -ob -ol+ -oi+
-compile_options += -i=$(tcp_h_dir) -i=$(common_h_dir)
+#compile_options += -i=$(tcp_h_dir) -i=$(common_h_dir)
 
 tcpobjs = packet.obj arp.obj eth.obj ip.obj tcp.obj tcpsockm.obj udp.obj utils.obj dns.obj timer.obj ipasm.obj trace.obj
 objs = telnet.obj telnetsc.obj keys.obj ymodem.obj

@@ -367,7 +367,7 @@ int main( int argc, char *argv[] ) {
   #endif
 
 
-  
+
 
 
 
@@ -447,7 +447,7 @@ int main( int argc, char *argv[] ) {
   //   1 - we want to close or the other side has initiated a close
   //   2 - we started a close
   //   3 - the close is complete, it timed out, or the user is impatient.
-  
+
   uint8_t done = 0;
 
   uint16_t bytesToRead = RECV_BUF_SIZE;
@@ -532,7 +532,7 @@ int main( int argc, char *argv[] ) {
       transferVars.checkForDownloadTimeout( );
     }
     #ifdef YMODEM_G
-    else if ( (SocketInputMode == SocketInputMode_t::Upload) && 
+    else if ( (SocketInputMode == SocketInputMode_t::Upload) &&
               (transferVars.fileProtocol == Transfer_vars::Ymodem_G) &&
               (transferVars.packetState == Transfer_vars::Uploading) &&
               (bytesInBuffer == 0) ) {
@@ -541,7 +541,7 @@ int main( int argc, char *argv[] ) {
       // because it just expects us to keep sending packets.  If we don't
       // have any bytes received on the socket and we are doing a Ymodem G
       // upload then just force the next packet out.
- 
+
       transferVars.sendForYmodemG( );
     }
     #endif
@@ -558,7 +558,7 @@ int main( int argc, char *argv[] ) {
 
     // If a keystroke is waiting process it
 
-    if ( bioskey(1) ) {
+    if ( bioskey(K_KEY_CHECK) ) {
 
       Key_t key=getKey( );
 
@@ -691,10 +691,10 @@ static void toggleOffSound( void ) {
 
 uint8_t processUserInput_TelnetLocal( Key_t key ) {
 
-  if ( key.specialKey == K_PageUp ) {
+  if ( key.specialKey == K_Local_PageUp ) {
     s.paint( s.terminalLines );
   }
-  else if ( key.specialKey == K_PageDown ) {
+  else if ( key.specialKey == K_Local_PageDown ) {
     s.paint( 0 - s.terminalLines );
   }
   else if ( key.specialKey == K_Alt_R ) {
@@ -808,11 +808,25 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 	  key.normalKey = 8;
 	}
       }
+      if ( key.normalKey == 0x20 ) {
+	uint16_t flags = bioskey(K_KEY_FLAGS);
+	if ( flags & 0x04 ){
+	  buf->b.dataLen = 1;
+	  buf->data[0] = 0x00;
+	  break;
+	}
+      }
 
       buf->b.dataLen = 1;
       buf->data[0] = key.normalKey;
       break;
 
+    }
+
+    case K_AltKey: {
+      buf->b.dataLen = 2;
+      buf->data[0] = 0x1b; buf->data[1] = key.normalKey;
+      break;
     }
 
     case K_Enter: {
@@ -845,7 +859,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
             buf->data[0] = 0x0D;
           }
           else {
-            // Send CR/NUL 
+            // Send CR/NUL
             buf->b.dataLen = 2;
             buf->data[0] = 0x0D; buf->data[1] = 0x00;
           }
@@ -863,39 +877,117 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
       break;
     }
 
+    case K_CenterKey: {
+      buf->b.dataLen = 3;
+      buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = 'E';
+      break;
+    }
+
+    case K_Insert: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
+	break;
+      }
+      buf->b.dataLen = 3;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = 'L';
+      break;
+    }
+
     case K_Home: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'H';
+	break;
+      }
       buf->b.dataLen = 3;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = 'H';
       break;
     }
 
+    case K_End: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'F';
+	break;
+      }
+      buf->b.dataLen = 3;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = 'F';
+      break;
+    }
+
     case K_CursorUp: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'A';
+	break;
+      }
       buf->b.dataLen = 3;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = 'A';
       break;
     }
 
     case K_CursorDown: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'B';
+	break;
+      }
       buf->b.dataLen = 3;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = 'B';
       break;
     }
 
     case K_CursorLeft: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'D';
+	break;
+      }
       buf->b.dataLen = 3;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = 'D';
       break;
     }
 
     case K_CursorRight: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'C';
+	break;
+      }
       buf->b.dataLen = 3;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = 'C';
       break;
     }
 
-    case K_Insert: {
-      buf->b.dataLen = 3;
-      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = 'L';
+    case K_PageDown: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '6'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
+	break;
+      }
+      buf->b.dataLen = 4;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '6'; buf->data[3] = '~';
+      break;
+    }
+
+    case K_PageUp: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '5'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
+	break;
+      }
+      buf->b.dataLen = 4;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '5'; buf->data[3] = '~';
       break;
     }
 
@@ -906,12 +998,691 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
       // comment) but this doesn't work universally.  So just send a del
       // character now, which is the correct safe choice.  (Previously
       // it was a dead key, so this is a slight improvement.
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
+	break;
+      }
 
-      //buf->b.dataLen = 4;
-      //buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = '~';
+      buf->b.dataLen = 4;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = '~';
 
-      buf->b.dataLen = 1;
-      buf->data[0] = 127;
+      // buf->b.dataLen = 1;
+      // buf->data[0] = 127;
+      break;
+    }
+
+    case K_Ctrl_Insert: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
+	break;
+      }
+      buf->b.dataLen = 6;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = '~';
+      break;
+    }
+
+    case K_Ctrl_Home: {
+      s.add( "" );
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'H';
+	break;
+      }
+      buf->b.dataLen = 6;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = 'H';
+      break;
+    }
+
+    case K_Ctrl_End: {
+      s.add( "" );
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'F';
+	break;
+      }
+      buf->b.dataLen = 6;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = 'F';
+      break;
+    }
+
+    case K_Ctrl_CursorUp: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'A';
+	break;
+      }
+      buf->b.dataLen = 6;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = 'A';
+      break;
+    }
+
+    case K_Ctrl_CursorDown: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'B';
+	break;
+      }
+      buf->b.dataLen = 6;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = 'B';
+      break;
+    }
+
+    case K_Ctrl_CursorLeft: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'D';
+	break;
+      }
+      buf->b.dataLen = 6;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = 'D';
+      break;
+    }
+
+    case K_Ctrl_CursorRight: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'C';
+	break;
+      }
+      buf->b.dataLen = 6;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = 'C';
+      break;
+    }
+
+    case K_Ctrl_PageDown: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '6'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
+	break;
+      }
+      buf->b.dataLen = 6;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '6'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = '~';
+      break;
+    }
+
+    case K_Ctrl_PageUp: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '5'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
+	break;
+      }
+      buf->b.dataLen = 6;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '5'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = '~';
+      break;
+    }
+
+    case K_Ctrl_PrtScr: {
+      buf->b.dataLen = 5;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '9'; buf->data[4] = '~';
+      break;      
+    }
+
+    case K_Alt_Insert: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = '~';
+	break;
+      }
+      buf->b.dataLen = 6;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = ';'; buf->data[4] = '3'; buf->data[5] = '~';
+      break;
+    }
+
+    case K_Alt_Home: {
+      s.add( "" );
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'H';
+	break;
+      }
+      buf->b.dataLen = 6;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '3'; buf->data[5] = 'H';
+      break;
+    }
+
+    case K_Alt_End: {
+      s.add( "" );
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'F';
+	break;
+      }
+      buf->b.dataLen = 6;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '3'; buf->data[5] = 'F';
+      break;
+    }
+
+    case K_Alt_CursorUp: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'A';
+	break;
+      }
+      buf->b.dataLen = 6;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '3'; buf->data[5] = 'A';
+      break;
+    }
+
+    case K_Alt_CursorDown: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'B';
+	break;
+      }
+      buf->b.dataLen = 6;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '3'; buf->data[5] = 'B';
+      break;
+    }
+
+    case K_Alt_CursorLeft: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'D';
+	break;
+      }
+      buf->b.dataLen = 6;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '3'; buf->data[5] = 'D';
+      break;
+    }
+
+    case K_Alt_CursorRight: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'C';
+	break;
+      }
+      buf->b.dataLen = 6;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '3'; buf->data[5] = 'C';
+      break;
+    }
+
+    case K_Ctrl_Backspace: {
+      //buf->b.dataLen = 1;
+      //buf->data[0] = 0x08;
+      s.add( "" );
+      buf->b.dataLen = 6;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '7'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = '~';
+      break;
+    }
+
+    case K_F1: {
+      buf->b.dataLen = 3;
+      buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = 'P';
+      break;
+    }
+
+    case K_F2: {
+      buf->b.dataLen = 3;
+      buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = 'Q';
+      break;
+    }
+
+    case K_F3: {
+      buf->b.dataLen = 3;
+      buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = 'R';
+      break;
+    }
+
+    case K_F4: {
+      buf->b.dataLen = 3;
+      buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = 'S';
+      break;
+    }
+
+    case K_F5: {
+      buf->b.dataLen = 5;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = '~';
+      break;
+    }
+
+    case K_F6: {
+      buf->b.dataLen = 5;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '7'; buf->data[4] = '~';
+      break;
+    }
+
+    case K_F7: {
+      buf->b.dataLen = 5;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '8'; buf->data[4] = '~';
+      break;
+    }
+
+    case K_F8: {
+      buf->b.dataLen = 5;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '9'; buf->data[4] = '~';
+      break;
+    }
+
+    case K_F9: {
+      buf->b.dataLen = 5;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '0'; buf->data[4] = '~';
+      break;
+    }
+
+    case K_F10: {
+      buf->b.dataLen = 5;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '1'; buf->data[4] = '~';
+      break;
+    }
+
+    case K_F11: {
+      buf->b.dataLen = 5;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '3'; buf->data[4] = '~';
+      break;
+    }
+
+    case K_F12: {
+      buf->b.dataLen = 5;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '4'; buf->data[4] = '~';
+      break;
+    }
+
+    case K_Shift_F1: {
+      buf->b.dataLen = 4;
+      buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '2'; buf->data[3] = 'P';
+      break;
+    }
+      
+    case K_Shift_F2: {
+      buf->b.dataLen = 4;
+      buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '2'; buf->data[3] = 'Q';
+      break;
+    }
+
+    case K_Shift_F3: {
+      buf->b.dataLen = 4;
+      buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '2'; buf->data[3] = 'R';
+      break;
+    }
+
+    case K_Shift_F4: {
+      buf->b.dataLen = 4;
+      buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '2'; buf->data[3] = 'S';
+      break;
+    }
+
+    case K_Shift_F5: {
+      buf->b.dataLen = 7;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '2'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Shift_F6: {
+      buf->b.dataLen = 7;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '7'; buf->data[4] = ';'; buf->data[5] = '2'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Shift_F7: {
+      buf->b.dataLen = 7;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '8'; buf->data[4] = ';'; buf->data[5] = '2'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Shift_F8: {
+      buf->b.dataLen = 7;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '9'; buf->data[4] = ';'; buf->data[5] = '2'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Shift_F9: {
+      buf->b.dataLen = 7;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '0'; buf->data[4] = ';'; buf->data[5] = '2'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Shift_F10: {
+      buf->b.dataLen = 7;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '1'; buf->data[4] = ';'; buf->data[5] = '2'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Shift_F11: {
+      buf->b.dataLen = 7;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '3'; buf->data[4] = ';'; buf->data[5] = '2'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Shift_F12: {
+      buf->b.dataLen = 7;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '4'; buf->data[4] = ';'; buf->data[5] = '2'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Alt_F1: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 4;
+	buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'P';
+	break;
+      }
+      buf->b.dataLen = 4;
+      buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '3'; buf->data[3] = 'P';
+      break;
+    }
+
+    case K_Alt_F2: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 4;
+	buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'Q';
+	break;
+      }
+      buf->b.dataLen = 4;
+      buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '3'; buf->data[3] = 'Q';
+      break;
+    }
+
+    case K_Alt_F3: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 4;
+	buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'R';
+	break;
+      }
+      buf->b.dataLen = 4;
+      buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '3'; buf->data[3] = 'R';
+      break;
+    }
+
+    case K_Alt_F4: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 4;
+	buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'S';
+	break;
+      }
+      buf->b.dataLen = 4;
+      buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '3'; buf->data[3] = 'S';
+      break;
+    }
+
+    case K_Alt_F5: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 7;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
+	break;
+      }
+      buf->b.dataLen = 7;
+      buf->data[1] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '3'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Alt_F6: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 7;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '7'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
+	break;
+      }
+      buf->b.dataLen = 7;
+      buf->data[1] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '7'; buf->data[4] = ';'; buf->data[5] = '3'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Alt_F7: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 7;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '8'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
+	break;
+      }
+      buf->b.dataLen = 7;
+      buf->data[1] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '8'; buf->data[4] = ';'; buf->data[5] = '3'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Alt_F8: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 7;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '9'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
+	break;
+      }
+      buf->b.dataLen = 7;
+      buf->data[1] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '9'; buf->data[4] = ';'; buf->data[5] = '3'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Alt_F9: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 7;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '0'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
+	break;
+      }
+      buf->b.dataLen = 7;
+      buf->data[1] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '0'; buf->data[4] = ';'; buf->data[5] = '3'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Alt_F10: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 7;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '1'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
+	break;
+      }
+      buf->b.dataLen = 7;
+      buf->data[1] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '1'; buf->data[4] = ';'; buf->data[5] = '3'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Alt_F11: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 7;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '3'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
+	break;
+      }
+      buf->b.dataLen = 7;
+      buf->data[1] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '3'; buf->data[4] = ';'; buf->data[5] = '3'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Alt_F12: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 7;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '4'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
+	break;
+      }
+      buf->b.dataLen = 7;
+      buf->data[1] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '4'; buf->data[4] = ';'; buf->data[5] = '3'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Ctrl_F1: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 4;
+	buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'P';
+	break;
+      }
+      buf->b.dataLen = 4;
+      buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '5'; buf->data[3] = 'P';
+      break;
+    }
+
+    case K_Ctrl_F2: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 4;
+	buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'Q';
+	break;
+      }
+      buf->b.dataLen = 4;
+      buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '5'; buf->data[3] = 'Q';
+      break;
+    }
+
+    case K_Ctrl_F3: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 4;
+	buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'R';
+	break;
+      }
+      buf->b.dataLen = 4;
+      buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '5'; buf->data[3] = 'R';
+      break;
+    }
+
+    case K_Ctrl_F4: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 4;
+	buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'S';
+	break;
+      }
+      buf->b.dataLen = 4;
+      buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '5'; buf->data[3] = 'S';
+      break;
+    }
+
+    case K_Ctrl_F5: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 7;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
+	break;
+      }
+      buf->b.dataLen = 7;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '5'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Ctrl_F6: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 7;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
+	break;
+      }
+      buf->b.dataLen = 7;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '7'; buf->data[4] = ';'; buf->data[5] = '5'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Ctrl_F7: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 7;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '8'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
+	break;
+      }
+      buf->b.dataLen = 7;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '8'; buf->data[4] = ';'; buf->data[5] = '5'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Ctrl_F8: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 7;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '9'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
+	break;
+      }
+      buf->b.dataLen = 7;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '9'; buf->data[4] = ';'; buf->data[5] = '5'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Ctrl_F9: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 7;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '0'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
+	break;
+      }
+      buf->b.dataLen = 7;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '0'; buf->data[4] = ';'; buf->data[5] = '5'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Ctrl_F10: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 7;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '1'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
+	break;
+      }
+      buf->b.dataLen = 7;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '1'; buf->data[4] = ';'; buf->data[5] = '5'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Ctrl_F11: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 7;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '3'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
+	break;
+      }
+      buf->b.dataLen = 7;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '3'; buf->data[4] = ';'; buf->data[5] = '5'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Ctrl_F12: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 7;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '4'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[7] = '~';
+	break;
+      }
+      buf->b.dataLen = 7;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '4'; buf->data[4] = ';'; buf->data[5] = '5'; buf->data[6] = '~';
+      break;
+    }
+
+    case K_Ctrl_Tab: {
+      buf->b.dataLen = 4;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = '~';
+      break;
+    }
+
+    case K_Ctrl_Delete: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
+	break;
+      }
+      buf->b.dataLen = 6;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = '~';
+      break;
+    }
+
+    case K_Alt_Delete: {
+      uint16_t flags = bioskey(K_KEY_FLAGS);
+      if ( flags & 0x03 ){
+	buf->b.dataLen = 6;
+	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = '~';
+	break;
+      }
+      buf->b.dataLen = 6;
+      buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = ';'; buf->data[4] = '3'; buf->data[5] = '~';
       break;
     }
 
@@ -923,7 +1694,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     // We don't do local echo ANSI strings.  Right now all of
     // our ANSI strings (and only them) are three bytes long,
     // so this is an easy way to detect them.
-    if ( buf->b.dataLen != 3 ) {
+    if ( buf->b.dataLen < 3 ) {
       s.add( (char *)buf->data, buf->b.dataLen );
     }
 
@@ -962,7 +1733,7 @@ void errorResolvingServer( void ) {
 
 void checkForUserExit( void ) {
 
-  if ( bioskey(1) ) {
+  if ( bioskey(K_KEY_CHECK) ) {
     char c = getch( );
     if ( c == 3 || c == 27 ) {
       s.add( "[Ctrl-C] or [Esc] pressed - quitting.\r\n" );
@@ -1397,7 +2168,7 @@ static void shutdown( int rc ) {
   // Take advantage of our screen variable being a global and initialized to
   // zeros.  If the Screen_base member is set then the screen was
   // initialized
-  // 
+  //
   if ( s.Screen_base != NULL ) s.paint( );
 
   Utils::endStack( );
@@ -1633,13 +2404,13 @@ int16_t processTelnetCmds( uint8_t *cmdStr, uint8_t cmdSize ) {
   send( telnetOptionsOutput, outputBufLen );
 
   return inputBytesConsumed;
-} 
+}
 
 
 
 
 
-// Process one telnet command.  The TEL_IAC character is already consumed 
+// Process one telnet command.  The TEL_IAC character is already consumed
 // before this is called so we are dealing with the second character in
 // the sequence.
 //
@@ -2428,7 +3199,7 @@ void processAnsiCommand( uint8_t commandLetter ) {
       send( (uint8_t *)tmpBuf, 7 );
       break;
     }
-      
+
 
 
     // DSR - Device Status Report   ( CSI 5 n )
@@ -2628,7 +3399,7 @@ static void processNonCSIEscSeq( uint8_t ch ) {
 
   } else if ( ch == '8' ) {
 
-    // DECRC: Restore cursor 
+    // DECRC: Restore cursor
     //
     s.restoreCursor( );
 
@@ -2671,4 +3442,3 @@ static void processNonCSIEscSeq( uint8_t ch ) {
   }
 
 }
-
