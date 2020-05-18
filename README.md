@@ -234,3 +234,4 @@ This is much faster than waiting for a full `wmake` to complete.
 [Open Watcom 1.9]: https://sourceforge.net/projects/openwatcom/files/open-watcom-1.9/
 [DosBox]: https://www.dosbox.com/
 [Vim]: https://www.vim.org/
+[Emacs]: https://www.gnu.org/software/emacs/
