@@ -80,7 +80,8 @@ These changes have been tested on an IBM PS/2 Model 25 running MS-DOS
 6.22 and Microsoft Mouse Driver ([MOUSE.COM]) version 7.03.  If your
 machine does not have support for the "enhanced keyboard," try the
 [TEL8088.EXE] file instead, which supports fewer keystrokes but should
-work on older machines.
+work on older machines.  Try [TELNET.EXE] first and see if it works,
+regardless of what machine you have.
 
 Unfortunately, I do not have access to other machines in order to test
 these changes.  Please feel free to create GitHub issues to let me

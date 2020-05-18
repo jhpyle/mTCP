@@ -50,7 +50,7 @@
 #include "utils.h"
 //#include "trace.h"
 
-static uint8_t UTF8Decode( uint8_t *p, uint16_t *c ) {
+inline static uint8_t UTF8Decode( uint8_t *p, uint16_t *c ) {
     uint8_t c0, c1, c2;
 
     c0 = p[0];
@@ -555,7 +555,7 @@ void Screen::extendSelectionRelative( uint16_t x1, uint16_t y1, uint16_t x2, uin
 
 void Screen::readWord( uint16_t x, uint16_t y ) {
   selection.start = ScrOffset(x, y);
-  if ( buffer[selection.start] <= 32 ){
+  if ( buffer[selection.start] == 32 ){
     return(readLine(y));
   }
   uint16_t minPoint = ScrOffset(0, 0);
@@ -568,7 +568,7 @@ void Screen::readWord( uint16_t x, uint16_t y ) {
     if ( selection.start == minPoint ){
       break;
     }
-    if ( buffer[selection.start - 2] <= 32 ){
+    if ( buffer[selection.start - 2] == 32 ){
       break;
     }
     selection.start -= 2;
@@ -581,7 +581,7 @@ void Screen::readWord( uint16_t x, uint16_t y ) {
     if ( selection.end >= maxPoint ){
       break;
     }
-    if ( buffer[selection.end] <= 32 ){
+    if ( buffer[selection.end] == 32 ){
       break;
     }
   }
@@ -592,7 +592,7 @@ void Screen::populateSelection(){
   uint16_t j = selection.start;
   while ( j != selection.end && i < MAX_SELECTION_SIZE ){
     if (i > 0 && ( j % bytesPerLine ) == 0){
-      while ( i > 0 && selection.buf[i - 1] <= 32 ){
+      while ( i > 0 && selection.buf[i - 1] == 32 ){
         i--;
       }
       selection.buf[i++] = 13;
@@ -605,7 +605,7 @@ void Screen::populateSelection(){
     }
   }
   if (i > 0 && ( selection.end % bytesPerLine ) == 0){
-    while ( i > 0 && selection.buf[i - 1] <= 32 ){
+    while ( i > 0 && selection.buf[i - 1] == 32 ){
       i--;
     }
     selection.buf[i++] = 13;
@@ -733,6 +733,8 @@ void Screen::add( char *buf, uint16_t len ) {
       case 0x25ba: { c = 0x10; break; }
       case 0x25c4: { c = 0x11; break; }
       case 0x2195: { c = 0x12; break; }
+      case 0x2039: { c = 0x3c; break; }
+      case 0x203a: { c = 0x3e; break; }
       case 0x203c: { c = 0x13; break; }
       case 0x00b6: { c = 0x14; break; }
       case 0x00a7: { c = 0x15; break; }
@@ -746,6 +748,7 @@ void Screen::add( char *buf, uint16_t len ) {
       case 0x2194: { c = 0x1d; break; }
       case 0x25b2: { c = 0x1e; break; }
       case 0x25bc: { c = 0x1f; break; }
+      case 0x2302: { c = 0x7f; break; }
       case 0x00c7: { c = 0x80; break; }
       case 0x00fc: { c = 0x81; break; }
       case 0x00e9: { c = 0x82; break; }
@@ -878,6 +881,12 @@ void Screen::add( char *buf, uint16_t len ) {
       case 0x201d: { c = 0x22; break; }
       case 0x2018: { c = 0x60; break; }
       case 0x2019: { c = 0x27; break; }
+      case 0x2011: { c = 0x2d; break; }
+      case 0x2012: { c = 0x2d; break; }
+      case 0x2013: { c = 0x2d; break; }
+      case 0x2014: { c = 0x2d; break; }
+      case 0x00a9: { c = 0x63; break; }
+      case 0x00ae: { c = 0x52; break; }
       default:     { c = 0xa8; break; }
       }
     }
