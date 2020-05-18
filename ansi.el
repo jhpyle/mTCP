@@ -1,5 +1,7 @@
 (if (member "TERM=ansi" initial-environment)
     (progn
+      (xterm-mouse-mode)
+      (set-variable 'xterm-max-cut-length 2000)
       (define-key global-map "\e[L" [insert])
       (define-key global-map "\e[H" [home])
       (define-key global-map "\e[F" [end])
