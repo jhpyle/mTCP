@@ -230,7 +230,7 @@ This is much faster than waiting for a full `wmake` to complete.
 [ansi.el]: https://github.com/jhpyle/mTCP/blob/master/ansi.el
 [DECSET]: https://invisible-island.net/xterm/ctlseqs/ctlseqs.pdf
 [Code Page 437]: https://en.wikipedia.org/wiki/Code_page_437
-[MOUSE.COM mouse driver]: https://www.computerhope.com/issues/ch000007.htm
+[MOUSE.COM]: https://www.computerhope.com/issues/ch000007.htm
 [Open Watcom 1.9]: https://sourceforge.net/projects/openwatcom/files/open-watcom-1.9/
 [DosBox]: https://www.dosbox.com/
 [Vim]: https://www.vim.org/
