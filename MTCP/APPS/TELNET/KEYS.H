@@ -27,6 +27,7 @@
    Changes:
 
    2012-04-29: Split out from telnet when xmodem and ymodem were added
+   2019-05-10: Extended keyboard support
 
 */
 
@@ -153,10 +154,8 @@ typedef struct {
   uint8_t normalKey;   // Valid only if specialKey = K_NormalKey
 } Key_t;
 
-
 Key_t getKey( void );
 
 
 
 #endif
-

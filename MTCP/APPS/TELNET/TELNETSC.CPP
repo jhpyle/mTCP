@@ -31,6 +31,7 @@
                because they seem to do it right.
    2015-01-22: Add 132 column support
    2018-10-27: Add code to prevent CGA snow
+   2020-05-17: Mouse and Unicode support.
 
 */
 
@@ -48,6 +49,24 @@
 #include "telnetsc.h"
 #include "utils.h"
 //#include "trace.h"
+
+static uint8_t UTF8Decode( uint8_t *p, uint16_t *c ) {
+    uint8_t c0, c1, c2;
+
+    c0 = p[0];
+    if( c0 <= 0x7f ) {
+        *c = c0;
+        return( 1 );
+    }
+    c1 = p[1];
+    if( c0 < 0xe0 ) {
+        *c = (( c0 & 0x1f ) << 6 ) | ( c1 & 0x3f );
+        return( 2 );
+    }
+    c2 = p[2];
+    *c = (( c0 & 0x0f ) << 12 ) | (( c1 & 0x3f ) << 6 ) | ( c2 & 0x3f );
+    return( 3 );
+}
 
 
 
@@ -146,6 +165,8 @@ int8_t Screen::init( uint8_t backScrollPages, uint8_t initWrapMode ) {
 
 
   totalLines = terminalLines * backScrollPages;
+
+  screenSize = terminalLines * bytesPerLine;
 
   bufferSize = totalLines * bytesPerLine;
 
@@ -275,9 +296,9 @@ void Screen::myCprintf_internal( uint8_t x, uint8_t y, uint8_t attr, char *fmt, 
         uint16_t ch = ( attr << 8 | c );
         if ( preventSnow ) {
           writeCharWithoutSnow(screenBaseSeg, FP_OFF(start),  ch  );
-	} else {
+        } else {
           *start = ch;
-	}
+        }
         start++;
         break;
       }
@@ -489,8 +510,172 @@ void Screen::scrollInternal( void ) {
 
 }
 
+void Screen::initializeSelection(){
+  selection.start = 0;
+  selection.end = 0;
+  selection.oldStart = 0;
+  selection.oldEnd = 0;
+  selection.highlighted = false;
+  selection.buf = (char *)malloc(MAX_SELECTION_SIZE_PLUS);
+  selection.buf[0] = 0;
+}
 
+void Screen::setSelectionStart( uint16_t x, uint16_t y ){
+  selection.start = ScrOffset(x, y);
+  selection.end = selection.start;
+}
 
+void Screen::extendSelection( uint16_t x, uint16_t y ){
+  uint16_t clickPoint = ScrOffset(x, y);
+  uint16_t screenClickPoint = ScrRelative(clickPoint);
+  uint16_t screenStart = ScrRelative(selection.end);
+  uint16_t screenEnd = ScrRelative(selection.start);
+  if ( screenClickPoint > screenStart){
+    selection.end = clickPoint;
+  }
+  else if ( screenClickPoint < screenStart ){
+    selection.start = clickPoint;
+  }
+}
+
+void Screen::extendSelectionRelative( uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2 ){
+  uint16_t clickPoint1 = ScrOffset(x1, y1);
+  uint16_t clickPoint2 = ScrOffset(x2, y2);
+  uint16_t screenClickPoint1 = ScrRelative(clickPoint1);
+  uint16_t screenClickPoint2 = ScrRelative(clickPoint2);
+  if ( screenClickPoint1 >= screenClickPoint2){
+    selection.start = clickPoint2;
+    selection.end = clickPoint1;
+  }
+  else {
+    selection.start = clickPoint1;
+    selection.end = clickPoint2;
+  }
+}
+
+void Screen::readWord( uint16_t x, uint16_t y ) {
+  selection.start = ScrOffset(x, y);
+  if ( buffer[selection.start] <= 32 ){
+    return(readLine(y));
+  }
+  uint16_t minPoint = ScrOffset(0, 0);
+  uint16_t maxPoint = ScrOffset(terminalCols - 1, terminalLines - 1);
+  selection.end = selection.start;
+  while (1){
+    if ( selection.start == 0 ){
+      selection.start = bufferSize - 2;
+    }
+    if ( selection.start == minPoint ){
+      break;
+    }
+    if ( buffer[selection.start - 2] <= 32 ){
+      break;
+    }
+    selection.start -= 2;
+  }
+  while (1){
+    selection.end += 2;
+    if ( selection.end >= bufferSize ){
+      selection.end = 0;
+    }
+    if ( selection.end >= maxPoint ){
+      break;
+    }
+    if ( buffer[selection.end] <= 32 ){
+      break;
+    }
+  }
+}
+
+void Screen::populateSelection(){
+  uint16_t i = 0;
+  uint16_t j = selection.start;
+  while ( j != selection.end && i < MAX_SELECTION_SIZE ){
+    if (i > 0 && ( j % bytesPerLine ) == 0){
+      while ( i > 0 && selection.buf[i - 1] <= 32 ){
+        i--;
+      }
+      selection.buf[i++] = 13;
+      selection.buf[i++] = 10;
+    }
+    selection.buf[i++] = buffer[j];
+    j += 2;
+    if ( j >= bufferSize ){
+      j = 0;
+    }
+  }
+  if (i > 0 && ( selection.end % bytesPerLine ) == 0){
+    while ( i > 0 && selection.buf[i - 1] <= 32 ){
+      i--;
+    }
+    selection.buf[i++] = 13;
+    selection.buf[i++] = 10;
+  }
+  selection.buf[i] = 0;
+}
+
+void Screen::readLine( uint16_t y ) {
+  selection.start = ScrOffset(0, y);
+  selection.end = selection.start + bytesPerLine;
+  if ( selection.end >= bufferSize ){
+    selection.end -= bufferSize;
+  }
+}
+
+void Screen::highlightSelection(bool highlight) {
+  if (highlight != selection.highlighted){
+    uint16_t j = selection.start;
+    while ( j != selection.end ){
+      buffer[j + 1] = ( buffer[j + 1] & 128 ) | ( ( ~buffer[j + 1] ) & 127 );
+      j += 2;
+      if ( j >= bufferSize ){
+        j = 0;
+      }
+    }
+    paint();
+    selection.highlighted = highlight;
+    if (highlight){
+      selection.oldStart = selection.start;
+      selection.oldEnd = selection.end;
+    }
+  }
+}
+
+void Screen::updateHighlight(){
+  if (!selection.highlighted){
+    return (highlightSelection(true));
+  }
+  uint16_t oldStart = ScrRelative(selection.oldStart);
+  uint16_t newStart = ScrRelative(selection.start);
+  uint16_t oldEnd = ScrRelative(selection.oldEnd);
+  uint16_t newEnd = ScrRelative(selection.end);
+  uint16_t theStart;
+  uint16_t theEnd;
+  if (oldStart < newStart){
+    theStart = selection.oldStart;
+  }
+  else{
+    theStart = selection.start;
+  }
+  if (oldEnd > newEnd){
+    theEnd = selection.oldEnd;
+  }
+  else{
+    theEnd = selection.end;
+  }
+  while (theStart != theEnd){
+    if ( !(theStart >= selection.oldStart && theStart < selection.oldEnd && theStart >= selection.start && theStart < selection.end) ){
+      buffer[theStart + 1] = ( buffer[theStart + 1] & 128 ) | ( ( ~buffer[theStart + 1] ) & 127 );
+    }
+    theStart += 2;
+    if (theStart >= bufferSize){
+      theStart = 0;
+    }
+  }
+  selection.oldStart = selection.start;
+  selection.oldEnd = selection.end;
+  paint();
+}
 
 // This seems silly and we could solve the problem by adding
 // a default value to the length parameter on the other add
@@ -519,36 +704,212 @@ void Screen::add( char *buf, uint16_t len ) {
 
   for ( uint16_t i=0; i < len; i++ ) {
 
-    uint8_t c = buf[i];
+    uint16_t utfcode;
+    uint8_t charType = UTF8Decode( (uint8_t *)(buf + i), &utfcode );
+
+    uint8_t c;
+    bool unspecial = true;
+    if (charType == 1){
+      c = buf[i];
+    }
+    else{
+      i += ( charType - 1 );
+      switch (utfcode){
+      case 0x263a: { c = 0x01; break; }
+      case 0x263b: { c = 0x02; break; }
+      case 0x2665: { c = 0x03; break; }
+      case 0x2666: { c = 0x04; break; }
+      case 0x2663: { c = 0x05; break; }
+      case 0x2660: { c = 0x06; break; }
+      case 0x2022: { c = 0x07; unspecial = false; break; }
+      case 0x25d8: { c = 0x08; unspecial = false; break; }
+      case 0x25cb: { c = 0x09; unspecial = false; break; }
+      case 0x25d9: { c = 0x0a; unspecial = false; break; }
+      case 0x2642: { c = 0x0b; break; }
+      case 0x2640: { c = 0x0c; unspecial = false; break; }
+      case 0x266a: { c = 0x0d; break; }
+      case 0x266b: { c = 0x0e; break; }
+      case 0x263c: { c = 0x0f; break; }
+      case 0x25ba: { c = 0x10; break; }
+      case 0x25c4: { c = 0x11; break; }
+      case 0x2195: { c = 0x12; break; }
+      case 0x203c: { c = 0x13; break; }
+      case 0x00b6: { c = 0x14; break; }
+      case 0x00a7: { c = 0x15; break; }
+      case 0x25ac: { c = 0x16; break; }
+      case 0x21ab: { c = 0x17; break; }
+      case 0x2191: { c = 0x18; break; }
+      case 0x2193: { c = 0x19; break; }
+      case 0x2192: { c = 0x1a; break; }
+      case 0x2190: { c = 0x1b; break; }
+      case 0x221f: { c = 0x1c; break; }
+      case 0x2194: { c = 0x1d; break; }
+      case 0x25b2: { c = 0x1e; break; }
+      case 0x25bc: { c = 0x1f; break; }
+      case 0x00c7: { c = 0x80; break; }
+      case 0x00fc: { c = 0x81; break; }
+      case 0x00e9: { c = 0x82; break; }
+      case 0x00e2: { c = 0x83; break; }
+      case 0x00e4: { c = 0x84; break; }
+      case 0x00e0: { c = 0x85; break; }
+      case 0x00e5: { c = 0x86; break; }
+      case 0x00e7: { c = 0x87; break; }
+      case 0x00ea: { c = 0x88; break; }
+      case 0x00eb: { c = 0x89; break; }
+      case 0x00e8: { c = 0x8a; break; }
+      case 0x00ef: { c = 0x8b; break; }
+      case 0x00ee: { c = 0x8c; break; }
+      case 0x00ec: { c = 0x8d; break; }
+      case 0x00c4: { c = 0x8e; break; }
+      case 0x00c5: { c = 0x8f; break; }
+      case 0x00c9: { c = 0x90; break; }
+      case 0x00e6: { c = 0x91; break; }
+      case 0x00c6: { c = 0x92; break; }
+      case 0x00f4: { c = 0x93; break; }
+      case 0x00f6: { c = 0x94; break; }
+      case 0x00f2: { c = 0x95; break; }
+      case 0x00fb: { c = 0x96; break; }
+      case 0x00f9: { c = 0x97; break; }
+      case 0x00ff: { c = 0x98; break; }
+      case 0x00d6: { c = 0x99; break; }
+      case 0x00dc: { c = 0x9a; break; }
+      case 0x00a2: { c = 0x9b; break; }
+      case 0x00a3: { c = 0x9c; break; }
+      case 0x00a5: { c = 0x9d; break; }
+      case 0x20a7: { c = 0x9e; break; }
+      case 0x0192: { c = 0x9f; break; }
+      case 0x00e1: { c = 0xa0; break; }
+      case 0x00ed: { c = 0xa1; break; }
+      case 0x00f3: { c = 0xa2; break; }
+      case 0x00fa: { c = 0xa3; break; }
+      case 0x00f1: { c = 0xa4; break; }
+      case 0x00d1: { c = 0xa5; break; }
+      case 0x00aa: { c = 0xa6; break; }
+      case 0x00ba: { c = 0xa7; break; }
+      case 0x00bf: { c = 0xa8; break; }
+      case 0x2310: { c = 0xa9; break; }
+      case 0x00ac: { c = 0xaa; break; }
+      case 0x00bd: { c = 0xab; break; }
+      case 0x00bc: { c = 0xac; break; }
+      case 0x00a1: { c = 0xad; break; }
+      case 0x00ab: { c = 0xae; break; }
+      case 0x00bb: { c = 0xaf; break; }
+      case 0x2591: { c = 0xb0; break; }
+      case 0x2592: { c = 0xb1; break; }
+      case 0x2593: { c = 0xb2; break; }
+      case 0x2502: { c = 0xb3; break; }
+      case 0x2524: { c = 0xb4; break; }
+      case 0x2561: { c = 0xb5; break; }
+      case 0x2562: { c = 0xb6; break; }
+      case 0x2556: { c = 0xb7; break; }
+      case 0x2555: { c = 0xb8; break; }
+      case 0x2563: { c = 0xb9; break; }
+      case 0x2551: { c = 0xba; break; }
+      case 0x2557: { c = 0xbb; break; }
+      case 0x255d: { c = 0xbc; break; }
+      case 0x255c: { c = 0xbd; break; }
+      case 0x255b: { c = 0xbe; break; }
+      case 0x2510: { c = 0xbf; break; }
+      case 0x2514: { c = 0xc0; break; }
+      case 0x2534: { c = 0xc1; break; }
+      case 0x252c: { c = 0xc2; break; }
+      case 0x251c: { c = 0xc3; break; }
+      case 0x2500: { c = 0xc4; break; }
+      case 0x253c: { c = 0xc5; break; }
+      case 0x255e: { c = 0xc6; break; }
+      case 0x255f: { c = 0xc7; break; }
+      case 0x255a: { c = 0xc8; break; }
+      case 0x2554: { c = 0xc9; break; }
+      case 0x2569: { c = 0xca; break; }
+      case 0x2566: { c = 0xcb; break; }
+      case 0x2560: { c = 0xcc; break; }
+      case 0x2550: { c = 0xcd; break; }
+      case 0x256c: { c = 0xce; break; }
+      case 0x2567: { c = 0xcf; break; }
+      case 0x2568: { c = 0xd0; break; }
+      case 0x2564: { c = 0xd1; break; }
+      case 0x2565: { c = 0xd2; break; }
+      case 0x2559: { c = 0xd3; break; }
+      case 0x2558: { c = 0xd4; break; }
+      case 0x2552: { c = 0xd5; break; }
+      case 0x2553: { c = 0xd6; break; }
+      case 0x256b: { c = 0xd7; break; }
+      case 0x256a: { c = 0xd8; break; }
+      case 0x2518: { c = 0xd9; break; }
+      case 0x250c: { c = 0xda; break; }
+      case 0x2588: { c = 0xdb; break; }
+      case 0x2584: { c = 0xdc; break; }
+      case 0x258c: { c = 0xdd; break; }
+      case 0x2590: { c = 0xde; break; }
+      case 0x2580: { c = 0xdf; break; }
+      case 0x03b1: { c = 0xe0; break; }
+      case 0x00df: { c = 0xe1; break; }
+      case 0x0393: { c = 0xe2; break; }
+      case 0x03c0: { c = 0xe3; break; }
+      case 0x03a3: { c = 0xe4; break; }
+      case 0x03c3: { c = 0xe5; break; }
+      case 0x00b5: { c = 0xe6; break; }
+      case 0x03c4: { c = 0xe7; break; }
+      case 0x03a6: { c = 0xe8; break; }
+      case 0x0398: { c = 0xe9; break; }
+      case 0x03a9: { c = 0xea; break; }
+      case 0x03b4: { c = 0xeb; break; }
+      case 0x221e: { c = 0xec; break; }
+      case 0x03c6: { c = 0xed; break; }
+      case 0x03b5: { c = 0xee; break; }
+      case 0x2229: { c = 0xef; break; }
+      case 0x2261: { c = 0xf0; break; }
+      case 0x00b1: { c = 0xf1; break; }
+      case 0x2265: { c = 0xf2; break; }
+      case 0x2264: { c = 0xf3; break; }
+      case 0x2320: { c = 0xf4; break; }
+      case 0x2321: { c = 0xf5; break; }
+      case 0x00f7: { c = 0xf6; break; }
+      case 0x2248: { c = 0xf7; break; }
+      case 0x00b0: { c = 0xf8; break; }
+      case 0x2219: { c = 0xf9; break; }
+      case 0x00b7: { c = 0xfa; break; }
+      case 0x221a: { c = 0xfb; break; }
+      case 0x207f: { c = 0xfc; break; }
+      case 0x00b2: { c = 0xfd; break; }
+      case 0x25a0: { c = 0xfe; break; }
+      case 0x00a0: { c = 0xff; break; }
+      case 0x201c: { c = 0x22; break; }
+      case 0x201d: { c = 0x22; break; }
+      case 0x2018: { c = 0x60; break; }
+      case 0x2019: { c = 0x27; break; }
+      default:     { c = 0xa8; break; }
+      }
+    }
 
     if ( c == 0 ) {         // Null char
       // Do nothing
     }
 
-    else if ( c == '\r' ) { // Carriage Return
+    else if ( unspecial && c == '\r' ) { // Carriage Return
       cursor_x = 0;
       overhang = false;
       updateVidBufPtr( );
     }
 
-    else if ( c == '\n' ) { // Line Feed
+    else if ( unspecial && c == '\n' ) { // Line Feed
       scroll( );
       overhang = false;
       updateVidBufPtr( );
     }
 
-    else if ( c == '\a' ) { // Attention/Bell
+    else if ( unspecial && c == '\a' ) { // Attention/Bell
       sound(1000); delay(100); nosound( );
     }
 
-    else if ( c == '\t' ) { // Tab
+    else if ( unspecial && c == '\t' ) { // Tab
       overhang = false;
       uint16_t newCursor_x = (cursor_x + 8) & 0xF8;
       if ( newCursor_x < terminalCols ) cursor_x = newCursor_x;
       updateVidBufPtr( );
     }
 
-    else if ( c == 8 || c == 127 ) { // Backspace or Delete Char
+    else if ( unspecial && (c == 8 || c == 127) ) { // Backspace or Delete Char
 
       if ( overhang == true ) {
         overhang = false;
@@ -619,11 +980,11 @@ void Screen::add( char *buf, uint16_t len ) {
 
         uint16_t ch = ( curAttr << 8 | c );
 
-	if ( preventSnow ) {
-	  writeCharWithoutSnow( screenBaseSeg, FP_OFF(vidBufPtr), ch );
-	} else {
-	  *((uint16_t far *)vidBufPtr) = ch;
-	}
+        if ( preventSnow ) {
+          writeCharWithoutSnow( screenBaseSeg, FP_OFF(vidBufPtr), ch );
+        } else {
+          *((uint16_t far *)vidBufPtr) = ch;
+        }
 
         // If overhang is not set then we can advance.  Otherwise, wait
         if ( overhang == false ) {
@@ -911,9 +1272,9 @@ void Screen::delChars( uint16_t len ) {
   // Slide the line in the virtual buffer first.
   if ( bytesToMove ) {
     memmove( buffer + ScrOffset( cursor_x, cursor_y ),
-	     buffer + ScrOffset( cursor_x + len, cursor_y ),
-	     bytesToMove
-	   );
+             buffer + ScrOffset( cursor_x + len, cursor_y ),
+             bytesToMove
+           );
   }
 
   // Clear will update both the virtual buffer and possibly the real screen.
@@ -971,9 +1332,9 @@ void Screen::insChars( uint16_t len ) {
   // Slide the line in the virtual buffer first.
   if ( bytesToMove ) {
     memmove( buffer + ScrOffset( cursor_x+len, cursor_y ),
-	     buffer + ScrOffset( cursor_x, cursor_y ),
-	     bytesToMove
-	   );
+             buffer + ScrOffset( cursor_x, cursor_y ),
+             bytesToMove
+           );
   }
 
 

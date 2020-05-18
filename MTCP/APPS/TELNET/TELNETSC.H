@@ -29,6 +29,7 @@
    2011-05-27: Initial release as open source software
    2015-01-22: Add 132 column support
    2018-10-27: Add code to prevent CGA snow
+   2020-05-17: Extended keyboard support
 
 */
 
@@ -37,6 +38,9 @@
 #ifndef _TELNETSC_H
 #define _TELNETSC_H
 
+#define MAX_SELECTION_SIZE 2000
+#define MAX_SELECTION_SIZE_PLUS 2048
+#define BASE64_BUFFER_SIZE 3000
 
 #include <stdarg.h>
 
@@ -90,6 +94,16 @@ class Screen {
     void scroll( void );
     void scrollInternal( void );
 
+    void readWord( uint16_t x, uint16_t y );
+    void setSelectionStart( uint16_t x, uint16_t y );
+    void extendSelection( uint16_t x, uint16_t y );
+    void extendSelectionRelative( uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2 );
+    void readLine( uint16_t y );
+    void initializeSelection();
+    void populateSelection();
+    void highlightSelection( bool highlight );
+    void updateHighlight();
+
     void add( char *buf );
     void add( char *buf, uint16_t len );
 
@@ -117,6 +131,14 @@ class Screen {
       return tmp;
     }
 
+    uint16_t Screen::ScrRelative( uint16_t point ){
+      if ( point > topOffset ){
+        return (point - topOffset);
+      }
+      else{
+        return (bufferSize - topOffset) + point;
+      }
+    }
 
     bool isColorCard( void ) { return colorCard; }
     bool isPreventSnowOn( void ) { return preventSnow; }
@@ -144,7 +166,7 @@ class Screen {
 
       if ( overhang ) {
         cursor_x = 0;
-	scroll( );
+        scroll( );
       }
       overhang = false;
     }
@@ -182,6 +204,21 @@ class Screen {
     bool originMode;
     bool autoWrap;
 
+    struct Selection {
+      char far *buf;
+      uint16_t  start;
+      uint16_t  end;
+      uint16_t  oldStart;
+      uint16_t  oldEnd;
+      bool      highlighted;
+      bool      pad1;
+      bool      pad2;
+      bool      pad3;
+      bool      pad4;
+      bool      pad5;
+      bool      pad6;
+      bool      pad7;
+    } selection;
 
   private:
 
@@ -197,6 +234,7 @@ class Screen {
 
     uint8_t far *buffer;        // Start of virtual screen buffer
     uint8_t far *bufferEnd;     // End of virtual screen buffer
+    uint16_t     screenSize;    // Size of a single screen in bytes
     uint16_t     bufferSize;    // Size of buffer area in bytes
     uint16_t     topOffset;     // Offset in bytes to start of virtual screen
     uint16_t     totalLines;    // How many lines for viewable and backscroll?

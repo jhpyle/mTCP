@@ -27,6 +27,7 @@
    Changes:
 
    2012-04-29: Split out from telnet when xmodem and ymodem were added
+   2020-05-10: Extended keyboard support
 
 */
 

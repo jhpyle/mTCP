@@ -50,10 +50,11 @@
    2018-10-27: Add code to eliminate CGA snow.  Add a CGA_MONO
                color scheme.
    2019-11-20: Terminal emulation bug fixes.
+   2020-05-10: Extended keyboard support.
+   2020-05-17: Mouse support.
 
    Todo:
 
-     Interpret Unicode characters
      Perf improvement: Minimize use of ScOffset in insline and delline
 */
 
@@ -87,11 +88,11 @@
 #include "telnet.h"
 #include "telnetsc.h"
 #include "keys.h"
+#include "mouse.h"
 
 #ifdef FILEXFER
 #include "ymodem.h"
 #endif
-
 
 // Buffer lengths
 
@@ -100,10 +101,7 @@
 #define RECV_BUF_SIZE      (2048)
 #define TERMTYPE_MAXLEN      (30)
 
-
-
 #define TELNET_CONNECT_TIMEOUT (30000ul)
-
 
 // Globals: Server information
 
@@ -135,15 +133,12 @@ uint8_t BackScrollPages = 4;
 uint32_t ConnectTimeout = TELNET_CONNECT_TIMEOUT; // How many ms to wait for a connection
 
 char TermType[TERMTYPE_MAXLEN] = "ANSI";
-
-
-
-
-
+char *incomingClipboard = (char *)malloc(BASE64_BUFFER_SIZE);
 
 static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len );
 
 static uint16_t processCSISeq( uint8_t *buffer, uint16_t len );
+static uint16_t processOSCSeq( uint8_t *buffer, uint16_t len );
 inline void     processAnsiCommand( uint8_t commandLetter );
 static void     processDecPrivateControl( uint8_t commandLetter );
 static void     processNonCSIEscSeq( uint8_t ch );
@@ -166,6 +161,81 @@ static void     doHelp( void );
 static void     send( uint8_t *userBuf, uint16_t userBufLen );
 
 
+char base64_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static inline bool is_base64(char c) {
+  return (isalnum(c) || (c == '+') || (c == '/'));
+}
+
+static void base64_decode(char *encoded_string, char *ret, int maxlen) {
+  int in_len = strlen(encoded_string);
+  int i = 0;
+  int j = 0;
+  int k = 0;
+  int in_ = 0;
+  int l;
+  char char_array_4[4], char_array_3[3];
+  maxlen--; // leave room for string terminator
+
+  while ( in_len-- && ( encoded_string[in_] != '=') && is_base64(encoded_string[in_]) ) {
+    char_array_4[i++] = encoded_string[in_];
+    in_++;
+    if (i == 4) {
+      for (i = 0; i < 4; i++){
+        bool found = false;
+        for (l = 0; l < 64; ++l){
+          if ( char_array_4[i] == base64_chars[l] ){
+            char_array_4[i] = l;
+            found = true;
+            break;
+          }
+        }
+        if (!found){
+          char_array_4[i] = 255;
+        }
+      }
+      char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
+      char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
+      char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
+
+      for (i = 0; (i < 3); i++){
+        if (k < maxlen){
+          ret[k++] = char_array_3[i];
+        }
+      }
+      i = 0;
+    }
+  }
+
+  if (i) {
+    for (j = i; j < 4; j++){
+      char_array_4[j] = 0;
+    }
+    for (j = 0; j < 4; j++){
+      bool found = false;
+      for (l = 0; l < 64; ++l){
+        if ( char_array_4[j] == base64_chars[l] ){
+          char_array_4[j] = l;
+          found = true;
+          break;
+        }
+      }
+      if (!found){
+        char_array_4[j] = 255;
+      }
+    }
+    char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
+    char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
+    char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
+
+    for (j = 0; (j < i - 1); j++){
+      if (k < maxlen){
+        ret[k++] = char_array_3[j];
+      }
+    }
+  }
+  ret[k++] = 0;
+}
 
 // Ctrl-Break and Ctrl-C handlers.
 
@@ -213,7 +283,7 @@ TelnetOpts MyTelnetOpts;
 
 Screen s;
 
-enum StreamStates { Normal = 0, ESC_SEEN, CSI_SEEN, IAC_SEEN };
+enum StreamStates { Normal = 0, ESC_SEEN, CSI_SEEN, OSC_SEEN, IAC_SEEN };
 StreamStates StreamState;
 
 
@@ -227,10 +297,16 @@ StreamStates StreamState;
 
 enum CsiParseState_t { LookForPrivateControl, NoParmsFound, ParmsFound };
 CsiParseState_t csiParseState;
+enum OscParseState_t { LookForPs, LookForClipboardCode, LookForData };
+OscParseState_t oscParseState;
 
 int16_t  parms[ CSI_ARGS ];  // Array of parameters
 uint16_t parmsFound;         // Number of parameters found
 bool     decPrivateControl;  // Is this a private control sequence?
+uint8_t  clipboardType;
+uint8_t  cutBuffer;
+bool     clipboardStore;
+bool     needToSendSelection = false;
 
 char     traceBuffer[60];    // ANSI debug trace buffer
 uint16_t traceBufferLen;
@@ -313,17 +389,343 @@ uint8_t scCommandKey;   // Used in the help menu
 uint8_t scToggleStatus; // Used in the help menu
 uint8_t scFileXfer;     // File transfer dialog boxes
 uint8_t scErr;          // Error messages
-
-
-
+Mouse_t mouse;          // Mouse status
 
 static char tmpBuf[160];
 
 
-
-
 static char CopyrightMsg1[] = "mTCP Telnet by M Brutman (mbbrutman@gmail.com) (C)opyright 2009-2020\r\n";
 static char CopyrightMsg2[] = "Version: " __DATE__ "\r\n\r\n";
+
+extern "C" uint8_t far mouse_changed;
+
+extern "C" uint16_t far buffer_buttons[16];
+extern "C" uint16_t far buffer_time_cx[16];
+extern "C" uint16_t far buffer_time_dx[16];
+extern "C" uint16_t far buffer_col[16];
+extern "C" uint16_t far buffer_row[16];
+extern "C" uint8_t far buffer_start;
+extern "C" uint8_t far buffer_end;
+uint8_t buffer_prev;
+uint16_t button_change;
+uint16_t buttons_down;
+uint16_t buttons_up;
+uint32_t ticks;
+uint32_t prevPrevLeftDown;
+uint32_t prevLeftDown;
+uint32_t currentTime;
+uint32_t currentTimeIsGood;
+uint32_t lastMouseTime = 0;
+
+void mouse_init( void ) {
+  if (ibm_mouse_init() == -1){
+    //printf( "\r\nUsing mouse\r\n" );
+    mouse.enable = true;
+  }
+  else{
+    //printf( "\r\nNot using mouse\r\n" );
+    mouse.enable = false;
+  }
+  mouse.showing = false;
+  mouse.should_show = false;
+  mouse.installed = false;
+  mouse.buttons = 0;
+  mouse.row = 0;
+  mouse.column = 0;
+  mouse.xterm_normal = false;
+  mouse.xterm_motion = false;
+  mouse.xterm_sgr = false;
+  mouse.xterm_any = false;
+  mouse.bracketed_paste = false;
+  mouse.pending = 0;
+  mouse.prev_down = 0;
+  mouse.prev_buttons = 0;
+  mouse.ignore_next_right_up = false;
+  mouse.next_up_is_middle_up = false;
+  mouse.ignore_next_left_up = false;
+}
+
+void mouse_install( void ) {
+  if (mouse.enable && !mouse.installed){
+    ibm_mouse_install();
+    mouse_changed = 0;
+    mouse.installed = true;
+  }
+}
+
+void mouse_uninstall( void ) {
+  if (mouse.enable && mouse.installed){
+    ibm_mouse_uninstall();
+    mouse_changed = 0;
+    mouse.installed = false;
+  }
+}
+
+void mouse_show( void ) {
+  if (mouse.enable && !(mouse.showing)){
+    ibm_mouse_show();
+    mouse.showing = true;
+  }
+}
+
+void mouse_hide( void ) {
+  if (mouse.enable && mouse.showing){
+    ibm_mouse_hide();
+    mouse.showing = false;
+  }
+}
+
+void mouse_get_status( void ) {
+  if (mouse.enable){
+    ibm_mouse_get_status(&(mouse.buttons), &(mouse.column), &(mouse.row));
+    mouse.column = mouse.column >> 3;
+    mouse.row = mouse.row >> 3;
+  }
+}
+
+uint8_t prevRow = 255;
+uint8_t prevCol = 255;
+uint8_t downRow = 255;
+uint8_t downCol = 255;
+
+void send_move(){
+  if ( mouse.buttons == 0 || ( mouse.row == prevRow && mouse.column == prevCol ) ){
+    prevRow = mouse.row;
+    prevCol = mouse.column;
+    return;
+  }
+  if ( mySocket->outgoingQueueIsFull( ) ) return;
+  prevRow = mouse.row;
+  prevCol = mouse.column;
+  if ( !mouse.xterm_motion ){
+    if ( mouse.buttons & 3 ){
+      mouse_hide();
+      s.extendSelectionRelative(mouse.row - 1, mouse.column - 1, downRow - 1, downCol - 1);
+      s.updateHighlight();
+      mouse_show();
+    }
+    return;
+  }
+  if ( mouse.xterm_sgr ){
+    uint8_t buttonVal = 32;
+    DataBuf *buf = (DataBuf *)TcpBuffer::getXmitBuf( );
+    uint8_t i = 0;
+    buf->data[i++] = 0x1b;
+    buf->data[i++] = '[';
+    buf->data[i++] = '<';
+    if ( mouse.buttons & 1 ){
+      buttonVal += 0;
+    }
+    else if ( mouse.buttons & 2 ){
+      buttonVal += 2;
+    }
+    else if ( mouse.buttons & 4 ){
+      buttonVal += 1;
+    }
+    char Cb[3];
+    int Cbn = sprintf(Cb, "%d", buttonVal);
+    uint8_t j;
+    for (j = 0; j < Cbn; j++){
+      buf->data[i++] = Cb[j];
+    }
+    buf->data[i++] = ';';
+    char Px[3];
+    char Py[3];
+    int Pxn = sprintf(Px, "%d", mouse.row);
+    int Pyn = sprintf(Py, "%d", mouse.column);
+    for (j = 0; j < Pxn; j++){
+      buf->data[i++] = Px[j];
+    }
+    buf->data[i++] = ';';
+    for (j = 0; j < Pyn; j++){
+      buf->data[i++] = Py[j];
+    }
+    buf->data[i++] = 'M';
+    buf->b.dataLen = i;
+    if ( mySocket->enqueue( &buf->b ) != 0 ) {
+      TcpBuffer::returnXmitBuf( (TcpBuffer *)buf );
+    }
+  }
+  else if ( mouse.xterm_normal ) {
+    DataBuf *buf = (DataBuf *)TcpBuffer::getXmitBuf( );
+    uint8_t i = 0;
+    uint8_t Cb;
+    if ( mouse.buttons & 4 ){
+      Cb = 65;
+    }
+    if ( mouse.buttons & 2 ){
+      Cb = 66;
+    }
+    else {
+      Cb = 64;
+    }
+    buf->b.dataLen = 6;
+    buf->data[0] = 0x1b;
+    buf->data[1] = '[';
+    buf->data[2] = 'M';
+    buf->data[3] = Cb;
+    buf->data[4] = 32 + mouse.row;
+    buf->data[5] = 32 + mouse.column;
+    if ( mySocket->enqueue( &buf->b ) != 0 ) {
+      TcpBuffer::returnXmitBuf( (TcpBuffer *)buf );
+    }
+  }
+}
+
+void send_selection(){
+  DataBuf *buf = (DataBuf *)TcpBuffer::getXmitBuf( );
+  int selection_length = strlen(s.selection.buf);
+  int i = 0;
+  if (mouse.bracketed_paste){
+    buf->data[i++] = 0x1b;
+    buf->data[i++] = '[';
+    buf->data[i++] = '2';
+    buf->data[i++] = '0';
+    buf->data[i++] = '0';
+    buf->data[i++] = '~';
+  }
+  for (int j = 0; j < selection_length; ++j){
+    buf->data[i++] = s.selection.buf[j];
+  }
+  if (mouse.bracketed_paste){
+    buf->data[i++] = 0x1b;
+    buf->data[i++] = '[';
+    buf->data[i++] = '2';
+    buf->data[i++] = '0';
+    buf->data[i++] = '1';
+    buf->data[i++] = '~';
+  }
+  buf->b.dataLen = i;
+  if ( mySocket->enqueue( &buf->b ) != 0 ) {
+    TcpBuffer::returnXmitBuf( (TcpBuffer *)buf );
+  }
+}
+
+void send_click( uint8_t direction, uint8_t buttonVal ){
+  if ( mySocket->outgoingQueueIsFull( ) ) return;
+  if ( mouse.xterm_sgr ){
+    // if (buttonVal == XTERM_BUTTON_MIDDLE){
+    //   if (direction == MOUSE_UP){
+    //         send_selection();
+    //   }
+    // }
+    // else {
+    prevRow = mouse.row;
+    prevCol = mouse.column;
+    DataBuf *buf = (DataBuf *)TcpBuffer::getXmitBuf( );
+    uint8_t i = 0;
+    buf->data[i++] = 0x1b;
+    buf->data[i++] = '[';
+    buf->data[i++] = '<';
+    char Cb[3];
+    int Cbn = sprintf(Cb, "%d", buttonVal);
+    uint8_t j;
+    for (j = 0; j < Cbn; j++){
+      buf->data[i++] = Cb[j];
+    }
+    buf->data[i++] = ';';
+    char Px[3];
+    char Py[3];
+    int Pxn = sprintf(Px, "%d", mouse.row);
+    int Pyn = sprintf(Py, "%d", mouse.column);
+    for (j = 0; j < Pxn; j++){
+      buf->data[i++] = Px[j];
+    }
+    buf->data[i++] = ';';
+    for (j = 0; j < Pyn; j++){
+      buf->data[i++] = Py[j];
+    }
+    if ( direction == MOUSE_DOWN ){
+      buf->data[i++] = 'M';
+    }
+    else {
+      buf->data[i++] = 'm';
+    }
+    buf->b.dataLen = i;
+    if ( mySocket->enqueue( &buf->b ) != 0 ) {
+      TcpBuffer::returnXmitBuf( (TcpBuffer *)buf );
+    }
+    // }
+  }
+  else if ( mouse.xterm_normal ) {
+    // if (buttonVal == XTERM_BUTTON_MIDDLE){
+    //   if (direction == MOUSE_UP){
+    //         send_selection();
+    //   }
+    // }
+    // else {
+    DataBuf *buf = (DataBuf *)TcpBuffer::getXmitBuf( );
+    uint8_t i = 0;
+    uint8_t Cb;
+    if ( direction == MOUSE_DOWN ){
+      Cb = 32 + buttonVal;
+    }
+    else{
+      Cb = '#';
+    }
+    buf->b.dataLen = 6;
+    buf->data[0] = 0x1b;
+    buf->data[1] = '[';
+    buf->data[2] = 'M';
+    buf->data[3] = Cb;
+    buf->data[4] = 32 + mouse.row;
+    buf->data[5] = 32 + mouse.column;
+    if ( mySocket->enqueue( &buf->b ) != 0 ) {
+      TcpBuffer::returnXmitBuf( (TcpBuffer *)buf );
+    }
+    // }
+  }
+  else{
+    if ( direction == XTERM_BUTTON_DOWN && buttonVal == XTERM_BUTTON_LEFT ){
+      downRow = mouse.row;
+      downCol = mouse.column;
+      if (!currentTimeIsGood){
+        ibm_mouse_get_time(&currentTime);
+      }
+      if ( currentTime - prevPrevLeftDown < 12){ // triple click
+        mouse_hide();
+        s.highlightSelection(false);
+        s.readLine(mouse.column - 1);
+        s.highlightSelection(true);
+        mouse_show();
+        prevPrevLeftDown = 0;
+        prevLeftDown = 0;
+      }
+      else if ( currentTime - prevLeftDown < 9){ // double click
+        mouse_hide();
+        s.highlightSelection(false);
+        s.readWord(mouse.row - 1, mouse.column - 1);
+        s.highlightSelection(true);
+        mouse_show();
+        prevPrevLeftDown = prevLeftDown;
+        prevLeftDown = currentTime;
+      }
+      else{
+        mouse_hide();
+        s.highlightSelection(false);
+        s.setSelectionStart(mouse.row - 1, mouse.column - 1);
+        mouse_show();
+        prevPrevLeftDown = prevLeftDown;
+        prevLeftDown = currentTime;
+      }
+    }
+    if ( direction == XTERM_BUTTON_DOWN && buttonVal == XTERM_BUTTON_RIGHT ){
+      mouse_hide();
+      s.highlightSelection(false);
+      s.extendSelection(mouse.row - 1, mouse.column - 1);
+      s.highlightSelection(true);
+      mouse_show();
+    }
+    if ( direction == XTERM_BUTTON_UP && ( buttonVal == XTERM_BUTTON_RIGHT || buttonVal == XTERM_BUTTON_LEFT ) ){
+      if ( s.selection.start != s.selection.end ){
+        s.populateSelection();
+      }
+    }
+    if ( direction == XTERM_BUTTON_UP && buttonVal == XTERM_BUTTON_MIDDLE ){
+      send_selection();
+    }
+  }
+}
 
 int main( int argc, char *argv[] ) {
 
@@ -348,7 +750,9 @@ int main( int argc, char *argv[] ) {
   // From this point forward you have to call the shutdown( ) routine to
   // exit because we have the timer interrupt hooked.
 
-
+  mouse_init();
+  mouse_install();
+  s.initializeSelection();
 
   // Allocate memory for a receive buffer.  This is in addition to the normal
   // socket receive buffer.  Do this early so that we don't get too far into
@@ -360,7 +764,6 @@ int main( int argc, char *argv[] ) {
     puts( "\nNot enough memory - exiting\n" );
     shutdown( -1 );
   }
-
 
   #ifdef FILEXFER
   initForXmodem( );
@@ -433,8 +836,8 @@ int main( int argc, char *argv[] ) {
 
 
   sprintf( tmpBuf, "Connected to %s (%d.%d.%d.%d) on port %u\r\n\r\n",
-	   serverAddrName, serverAddr[0], serverAddr[1],
-	   serverAddr[2], serverAddr[3], serverPort );
+           serverAddrName, serverAddr[0], serverAddr[1],
+           serverAddr[2], serverAddr[3], serverPort );
   s.add( tmpBuf );
 
 
@@ -504,7 +907,6 @@ int main( int argc, char *argv[] ) {
 
     } // end while
 
-
     // We might have had bytes to process even though we have not received new
     // data.  Take care of them.  (This only should happen if we are processing
     // telnet options and we use up too many outgoing buffers with small payloads.)
@@ -547,14 +949,243 @@ int main( int argc, char *argv[] ) {
     #endif
     #endif
 
-
     if ( s.isVirtualScreenUpdated( ) && UserInputMode == UserInputMode_t::Telnet ) {
+      if ( mouse.xterm_any && mouse.showing ){
+        mouse_hide();
+      }
       s.paint( );
       s.updateVidBufPtr( );
+      if ( mouse.xterm_any && mouse.should_show ){
+        mouse_show();
+      }
     }
 
     if ( UserInputMode == UserInputMode_t::Telnet ) { gotoxy( s.cursor_x, s.cursor_y ); }
 
+    if ( needToSendSelection ){
+      send_selection();
+      needToSendSelection = false;
+    }
+
+    if ( mouse.pending > 0 ){
+      ibm_mouse_get_time(&currentTime);
+      currentTimeIsGood = true;
+      ticks = currentTime - mouse.prev_down;
+      if ( mouse.pending & MOUSE_LEFT ){
+        //if ( ticks >= MOUSE_TICKS_DOUBLE_CLICK ){
+        if ( ticks >= MOUSE_TICKS_MIDDLE_CLICK ){
+          //printf("L DOWN DELAYED\r\n");
+          send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_LEFT);
+          mouse.buttons |= 1;
+          mouse.pending &= ~MOUSE_LEFT;
+          mouse.prev_down = 0;
+        }
+      }
+      if ( mouse.pending & MOUSE_RIGHT ){
+        if ( ticks >= MOUSE_TICKS_MIDDLE_CLICK ){
+          //printf("R DOWN DELAYED\r\n");
+          send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_RIGHT);
+          mouse.buttons |= 2;
+          mouse.pending &= ~MOUSE_RIGHT;
+          mouse.prev_down = 0;
+        }
+      }
+      // if ( mouse.pending & MOUSE_DOUBLE_START ){
+      //         if ( ticks >= MOUSE_TICKS_DOUBLE_CLICK ){
+      //           //printf("L UP DELAYED\r\n");
+      //           send_click(XTERM_BUTTON_UP, XTERM_BUTTON_LEFT);
+      //     mouse.buttons &= ~1;
+      //           mouse.pending &= ~MOUSE_DOUBLE_START;
+      //           mouse.prev_down = 0;
+      //         }
+      // }
+    }
+    else{
+      currentTimeIsGood = false;
+    }
+
+    //gets itself into a state where double click testing is not done; it does L DOWN DELAYED immediately
+    //after left mouse button goes down
+    if ( mouse_changed ){
+      mouse_changed = 0;
+      if ( !mouse.should_show ){
+        mouse.should_show = true;
+        mouse_show();
+      }
+      if (currentTimeIsGood){
+        lastMouseTime = currentTime;
+      }
+      else{
+        ibm_mouse_get_time(&lastMouseTime);
+      }
+      send_move();
+      if ( buffer_start == buffer_end ){
+      }
+      else{
+        while (1){
+          if (buffer_start == 0){
+            buffer_prev = 15;
+          }
+          else {
+            buffer_prev = buffer_start - 1;
+          }
+          if (mouse.pending && (buffer_row[buffer_start] != buffer_row[buffer_prev] || buffer_col[buffer_start] != buffer_col[buffer_prev]) && buffer_row[buffer_prev] != 255){
+            if ( mouse.pending & 1 ){
+              send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_LEFT);
+              mouse.buttons |= 1;
+              mouse.pending &= ~1;
+            }
+            if ( mouse.pending & 2 ){
+              send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_RIGHT);
+              mouse.buttons |= 2;
+              mouse.pending &= ~2;
+            }
+            send_move();
+          }
+            mouse.row = buffer_row[buffer_start] + 1;
+          mouse.column = buffer_col[buffer_start] + 1;
+          button_change = buffer_buttons[buffer_start] ^ buffer_buttons[buffer_prev];
+
+          if ( button_change > 0 ){
+            buttons_down = buffer_buttons[buffer_start] & button_change;
+            buttons_up = (~buffer_buttons[buffer_start]) & button_change;
+            if ( buttons_down & 3 ){ // left and/or right down
+              currentTime = (buffer_time_cx[buffer_start] << 16) + buffer_time_dx[buffer_start];
+              ticks = currentTime - mouse.prev_down;
+
+              // if ( ticks < MOUSE_TICKS_DOUBLE_CLICK && ( buttons_down & 1 ) && ( mouse.prev_buttons & 1 )){
+              //         // double click
+              //   if ( mouse.pending & MOUSE_DOUBLE_START ){
+              //           mouse.pending &= ~MOUSE_DOUBLE_START;
+              //         }
+              //         //printf("DC down\r\n");
+              //   send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_LEFT);
+              //         mouse.buttons |= 1;
+              //         mouse.prev_down = 0;
+              //         mouse.pending &= ~1;
+              // }
+              if ( ( ( buttons_down & 3 ) == 3 ) || ( ticks < MOUSE_TICKS_MIDDLE_CLICK && (( buttons_down ^ mouse.prev_buttons ) & 3 ) == 3 ) ){
+                // middle click
+                // send middle down
+                //printf("M DOWN\r\n");
+                send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_MIDDLE);
+                mouse.buttons |= 4;
+                //final_buttons_down &= ~3; // don't send
+                //final_buttons_down |= 4; // artificial middle
+                mouse.next_up_is_middle_up = true;
+                mouse.prev_down = 0;
+                mouse.pending &= ~3;
+              }
+              else{
+                mouse.pending |= (buttons_down & 3);
+                mouse.prev_down = currentTime;
+              }
+              mouse.prev_buttons = buttons_down;
+            }
+            if ( buttons_down & MOUSE_MIDDLE ){
+              //printf("M DOWN NATURAL\r\n");
+              send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_MIDDLE);
+              mouse.buttons |= 4;
+            }
+            if ( (buttons_up & 3) == 3 ){
+              //printf("M UP\r\n");
+              if ( mouse.pending & 1 ){
+                send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_LEFT);
+                mouse.buttons |= 1;
+                mouse.pending &= ~1;
+              }
+              if ( mouse.pending & 2 ){
+                send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_RIGHT);
+                mouse.buttons |= 2;
+                mouse.pending &= ~2;
+              }
+              if ( mouse.buttons & 4 ){
+                send_click(XTERM_BUTTON_UP, XTERM_BUTTON_MIDDLE);
+              }
+              else{
+                send_click(XTERM_BUTTON_UP, XTERM_BUTTON_LEFT);
+                send_click(XTERM_BUTTON_UP, XTERM_BUTTON_RIGHT);
+              }
+              mouse.buttons &= ~7;
+              mouse.next_up_is_middle_up = false;
+            }
+            else {
+              if ( buttons_up & MOUSE_LEFT ){
+                // currentTime = (buffer_time_cx[buffer_start] << 16) + buffer_time_dx[buffer_start];
+                // ticks = currentTime - mouse.prev_down;
+                // if ( ticks < 9){
+                //   mouse.pending |= MOUSE_DOUBLE_START;
+                // }
+                // else{
+                if ( mouse.pending & 1 ){
+                  //printf("L DOWN (ACCEL)\r\n");
+                  send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_LEFT);
+                  mouse.buttons |= 1;
+                  mouse.pending &= ~1;
+                }
+                if (mouse.ignore_next_left_up){
+                  mouse.ignore_next_left_up = false;
+                }
+                else if (mouse.next_up_is_middle_up){
+                  //printf("M UP\r\n");
+                  send_click(XTERM_BUTTON_UP, XTERM_BUTTON_MIDDLE);
+                  mouse.buttons &= ~4;
+                  mouse.next_up_is_middle_up = false;
+                  mouse.ignore_next_right_up = true;
+                }
+                else{
+                  //printf("L UP\r\n");
+                  send_click(XTERM_BUTTON_UP, XTERM_BUTTON_LEFT);
+                  mouse.buttons &= ~1;
+                }
+              }
+              if ( buttons_up & MOUSE_RIGHT ){
+                if ( mouse.pending & 2 ){
+                  //printf("R DOWN (ACCEL)\r\n");
+                  send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_RIGHT);
+                  mouse.buttons |= 2;
+                  mouse.pending &= ~2;
+                }
+                if (mouse.ignore_next_right_up){
+                  mouse.ignore_next_right_up = false;
+                }
+                else if (mouse.next_up_is_middle_up){
+                  //printf("M UP\r\n");
+                  send_click(XTERM_BUTTON_UP, XTERM_BUTTON_MIDDLE);
+                  mouse.buttons &= ~4;
+                  mouse.next_up_is_middle_up = false;
+                  mouse.ignore_next_left_up = true;
+                }
+                else{
+                  //printf("R UP\r\n");
+                  send_click(XTERM_BUTTON_UP, XTERM_BUTTON_RIGHT);
+                  mouse.buttons &= ~2;
+                }
+              }
+            }
+            if ( buttons_up & MOUSE_MIDDLE ){
+              //printf("M UP NATURAL\r\n");
+              send_click(XTERM_BUTTON_UP, XTERM_BUTTON_MIDDLE);
+              mouse.buttons &= ~4;
+            }
+          }
+
+          buffer_start = (buffer_start + 1) & 0x0f;
+          if (buffer_start == buffer_end){
+            break;
+          }
+        }
+      }
+    }
+    else{
+      if (!currentTimeIsGood){
+        ibm_mouse_get_time(&currentTime);
+      }
+      if ( ( currentTime - lastMouseTime ) > MOUSE_TICKS_SHOW_DURATION ){
+        mouse.should_show = false;
+        mouse_hide();
+      }
+    }
 
     // If a keystroke is waiting process it
 
@@ -631,7 +1262,7 @@ int main( int argc, char *argv[] ) {
 
   }
 
-
+  mouse_hide();
   s.curAttr = 0x07;
   s.add( "\r\nConnection closed - have a great day!\r\n" );
 
@@ -802,19 +1433,19 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
       if ( SendBsAsDel ) {
         if ( key.normalKey == 8 ) {
-	  key.normalKey = 127;
-	}
-	else if ( key.normalKey == 127 ) {
-	  key.normalKey = 8;
-	}
+          key.normalKey = 127;
+        }
+        else if ( key.normalKey == 127 ) {
+          key.normalKey = 8;
+        }
       }
       if ( key.normalKey == 0x20 ) {
-	uint16_t flags = bioskey(K_KEY_FLAGS);
-	if ( flags & 0x04 ){
-	  buf->b.dataLen = 1;
-	  buf->data[0] = 0x00;
-	  break;
-	}
+        uint16_t flags = bioskey(K_KEY_FLAGS);
+        if ( flags & 0x04 ){
+          buf->b.dataLen = 1;
+          buf->data[0] = 0x00;
+          break;
+        }
       }
 
       buf->b.dataLen = 1;
@@ -886,9 +1517,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Insert: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
+        break;
       }
       buf->b.dataLen = 3;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = 'L';
@@ -898,9 +1529,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Home: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'H';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'H';
+        break;
       }
       buf->b.dataLen = 3;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = 'H';
@@ -910,9 +1541,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_End: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'F';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'F';
+        break;
       }
       buf->b.dataLen = 3;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = 'F';
@@ -922,9 +1553,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_CursorUp: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'A';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'A';
+        break;
       }
       buf->b.dataLen = 3;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = 'A';
@@ -934,9 +1565,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_CursorDown: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'B';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'B';
+        break;
       }
       buf->b.dataLen = 3;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = 'B';
@@ -946,9 +1577,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_CursorLeft: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'D';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'D';
+        break;
       }
       buf->b.dataLen = 3;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = 'D';
@@ -958,9 +1589,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_CursorRight: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'C';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'C';
+        break;
       }
       buf->b.dataLen = 3;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = 'C';
@@ -970,9 +1601,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_PageDown: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '6'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '6'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
+        break;
       }
       buf->b.dataLen = 4;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '6'; buf->data[3] = '~';
@@ -982,9 +1613,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_PageUp: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '5'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '5'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
+        break;
       }
       buf->b.dataLen = 4;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '5'; buf->data[3] = '~';
@@ -1000,9 +1631,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
       // it was a dead key, so this is a slight improvement.
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
+        break;
       }
 
       buf->b.dataLen = 4;
@@ -1016,9 +1647,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_Insert: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
+        break;
       }
       buf->b.dataLen = 6;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = '~';
@@ -1029,9 +1660,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
       s.add( "" );
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'H';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'H';
+        break;
       }
       buf->b.dataLen = 6;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = 'H';
@@ -1042,9 +1673,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
       s.add( "" );
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'F';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'F';
+        break;
       }
       buf->b.dataLen = 6;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = 'F';
@@ -1054,9 +1685,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_CursorUp: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'A';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'A';
+        break;
       }
       buf->b.dataLen = 6;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = 'A';
@@ -1066,9 +1697,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_CursorDown: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'B';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'B';
+        break;
       }
       buf->b.dataLen = 6;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = 'B';
@@ -1078,9 +1709,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_CursorLeft: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'D';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'D';
+        break;
       }
       buf->b.dataLen = 6;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = 'D';
@@ -1090,9 +1721,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_CursorRight: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'C';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'C';
+        break;
       }
       buf->b.dataLen = 6;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = 'C';
@@ -1102,9 +1733,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_PageDown: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '6'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '6'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
+        break;
       }
       buf->b.dataLen = 6;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '6'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = '~';
@@ -1114,9 +1745,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_PageUp: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '5'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '5'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
+        break;
       }
       buf->b.dataLen = 6;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '5'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = '~';
@@ -1126,15 +1757,15 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_PrtScr: {
       buf->b.dataLen = 5;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '9'; buf->data[4] = '~';
-      break;      
+      break;
     }
 
     case K_Alt_Insert: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = '~';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = '~';
+        break;
       }
       buf->b.dataLen = 6;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = ';'; buf->data[4] = '3'; buf->data[5] = '~';
@@ -1145,9 +1776,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
       s.add( "" );
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'H';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'H';
+        break;
       }
       buf->b.dataLen = 6;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '3'; buf->data[5] = 'H';
@@ -1158,9 +1789,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
       s.add( "" );
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'F';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'F';
+        break;
       }
       buf->b.dataLen = 6;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '3'; buf->data[5] = 'F';
@@ -1170,9 +1801,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Alt_CursorUp: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'A';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'A';
+        break;
       }
       buf->b.dataLen = 6;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '3'; buf->data[5] = 'A';
@@ -1182,9 +1813,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Alt_CursorDown: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'B';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'B';
+        break;
       }
       buf->b.dataLen = 6;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '3'; buf->data[5] = 'B';
@@ -1194,9 +1825,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Alt_CursorLeft: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'D';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'D';
+        break;
       }
       buf->b.dataLen = 6;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '3'; buf->data[5] = 'D';
@@ -1206,9 +1837,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Alt_CursorRight: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'C';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'C';
+        break;
       }
       buf->b.dataLen = 6;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '3'; buf->data[5] = 'C';
@@ -1301,7 +1932,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
       buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '2'; buf->data[3] = 'P';
       break;
     }
-      
+
     case K_Shift_F2: {
       buf->b.dataLen = 4;
       buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '2'; buf->data[3] = 'Q';
@@ -1371,9 +2002,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Alt_F1: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 4;
-	buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'P';
-	break;
+        buf->b.dataLen = 4;
+        buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'P';
+        break;
       }
       buf->b.dataLen = 4;
       buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '3'; buf->data[3] = 'P';
@@ -1383,9 +2014,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Alt_F2: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 4;
-	buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'Q';
-	break;
+        buf->b.dataLen = 4;
+        buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'Q';
+        break;
       }
       buf->b.dataLen = 4;
       buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '3'; buf->data[3] = 'Q';
@@ -1395,9 +2026,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Alt_F3: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 4;
-	buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'R';
-	break;
+        buf->b.dataLen = 4;
+        buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'R';
+        break;
       }
       buf->b.dataLen = 4;
       buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '3'; buf->data[3] = 'R';
@@ -1407,9 +2038,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Alt_F4: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 4;
-	buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'S';
-	break;
+        buf->b.dataLen = 4;
+        buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'S';
+        break;
       }
       buf->b.dataLen = 4;
       buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '3'; buf->data[3] = 'S';
@@ -1419,9 +2050,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Alt_F5: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 7;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
-	break;
+        buf->b.dataLen = 7;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
+        break;
       }
       buf->b.dataLen = 7;
       buf->data[1] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '3'; buf->data[6] = '~';
@@ -1431,9 +2062,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Alt_F6: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 7;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '7'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
-	break;
+        buf->b.dataLen = 7;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '7'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
+        break;
       }
       buf->b.dataLen = 7;
       buf->data[1] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '7'; buf->data[4] = ';'; buf->data[5] = '3'; buf->data[6] = '~';
@@ -1443,9 +2074,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Alt_F7: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 7;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '8'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
-	break;
+        buf->b.dataLen = 7;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '8'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
+        break;
       }
       buf->b.dataLen = 7;
       buf->data[1] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '8'; buf->data[4] = ';'; buf->data[5] = '3'; buf->data[6] = '~';
@@ -1455,9 +2086,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Alt_F8: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 7;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '9'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
-	break;
+        buf->b.dataLen = 7;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '9'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
+        break;
       }
       buf->b.dataLen = 7;
       buf->data[1] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '9'; buf->data[4] = ';'; buf->data[5] = '3'; buf->data[6] = '~';
@@ -1467,9 +2098,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Alt_F9: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 7;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '0'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
-	break;
+        buf->b.dataLen = 7;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '0'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
+        break;
       }
       buf->b.dataLen = 7;
       buf->data[1] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '0'; buf->data[4] = ';'; buf->data[5] = '3'; buf->data[6] = '~';
@@ -1479,9 +2110,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Alt_F10: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 7;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '1'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
-	break;
+        buf->b.dataLen = 7;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '1'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
+        break;
       }
       buf->b.dataLen = 7;
       buf->data[1] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '1'; buf->data[4] = ';'; buf->data[5] = '3'; buf->data[6] = '~';
@@ -1491,9 +2122,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Alt_F11: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 7;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '3'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
-	break;
+        buf->b.dataLen = 7;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '3'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
+        break;
       }
       buf->b.dataLen = 7;
       buf->data[1] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '3'; buf->data[4] = ';'; buf->data[5] = '3'; buf->data[6] = '~';
@@ -1503,9 +2134,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Alt_F12: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 7;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '4'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
-	break;
+        buf->b.dataLen = 7;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '4'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
+        break;
       }
       buf->b.dataLen = 7;
       buf->data[1] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '4'; buf->data[4] = ';'; buf->data[5] = '3'; buf->data[6] = '~';
@@ -1515,9 +2146,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_F1: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 4;
-	buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'P';
-	break;
+        buf->b.dataLen = 4;
+        buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'P';
+        break;
       }
       buf->b.dataLen = 4;
       buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '5'; buf->data[3] = 'P';
@@ -1527,9 +2158,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_F2: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 4;
-	buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'Q';
-	break;
+        buf->b.dataLen = 4;
+        buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'Q';
+        break;
       }
       buf->b.dataLen = 4;
       buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '5'; buf->data[3] = 'Q';
@@ -1539,9 +2170,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_F3: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 4;
-	buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'R';
-	break;
+        buf->b.dataLen = 4;
+        buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'R';
+        break;
       }
       buf->b.dataLen = 4;
       buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '5'; buf->data[3] = 'R';
@@ -1551,9 +2182,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_F4: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 4;
-	buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'S';
-	break;
+        buf->b.dataLen = 4;
+        buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'S';
+        break;
       }
       buf->b.dataLen = 4;
       buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '5'; buf->data[3] = 'S';
@@ -1563,9 +2194,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_F5: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 7;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
-	break;
+        buf->b.dataLen = 7;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
+        break;
       }
       buf->b.dataLen = 7;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '5'; buf->data[6] = '~';
@@ -1575,9 +2206,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_F6: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 7;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
-	break;
+        buf->b.dataLen = 7;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
+        break;
       }
       buf->b.dataLen = 7;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '7'; buf->data[4] = ';'; buf->data[5] = '5'; buf->data[6] = '~';
@@ -1587,9 +2218,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_F7: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 7;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '8'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
-	break;
+        buf->b.dataLen = 7;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '8'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
+        break;
       }
       buf->b.dataLen = 7;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '8'; buf->data[4] = ';'; buf->data[5] = '5'; buf->data[6] = '~';
@@ -1599,9 +2230,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_F8: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 7;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '9'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
-	break;
+        buf->b.dataLen = 7;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '9'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
+        break;
       }
       buf->b.dataLen = 7;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '9'; buf->data[4] = ';'; buf->data[5] = '5'; buf->data[6] = '~';
@@ -1611,9 +2242,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_F9: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 7;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '0'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
-	break;
+        buf->b.dataLen = 7;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '0'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
+        break;
       }
       buf->b.dataLen = 7;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '0'; buf->data[4] = ';'; buf->data[5] = '5'; buf->data[6] = '~';
@@ -1623,9 +2254,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_F10: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 7;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '1'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
-	break;
+        buf->b.dataLen = 7;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '1'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
+        break;
       }
       buf->b.dataLen = 7;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '1'; buf->data[4] = ';'; buf->data[5] = '5'; buf->data[6] = '~';
@@ -1635,9 +2266,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_F11: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 7;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '3'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
-	break;
+        buf->b.dataLen = 7;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '3'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
+        break;
       }
       buf->b.dataLen = 7;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '3'; buf->data[4] = ';'; buf->data[5] = '5'; buf->data[6] = '~';
@@ -1647,9 +2278,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_F12: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 7;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '4'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[7] = '~';
-	break;
+        buf->b.dataLen = 7;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '4'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[7] = '~';
+        break;
       }
       buf->b.dataLen = 7;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '4'; buf->data[4] = ';'; buf->data[5] = '5'; buf->data[6] = '~';
@@ -1665,9 +2296,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_Delete: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
+        break;
       }
       buf->b.dataLen = 6;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = ';'; buf->data[4] = '5'; buf->data[5] = '~';
@@ -1677,9 +2308,9 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Alt_Delete: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
       if ( flags & 0x03 ){
-	buf->b.dataLen = 6;
-	buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = '~';
-	break;
+        buf->b.dataLen = 6;
+        buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = '~';
+        break;
       }
       buf->b.dataLen = 6;
       buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = ';'; buf->data[4] = '3'; buf->data[5] = '~';
@@ -1857,7 +2488,7 @@ void sendInitialTelnetOpts( void ) {
     // MyTelnetOpts.setWillOrWontPending( TELOPT_BIN );
 
     uint8_t output[] = { TEL_IAC, TELCMD_DO, TELOPT_ECHO,
-			 TEL_IAC, TELCMD_DO, TELOPT_SGA };
+                         TEL_IAC, TELCMD_DO, TELOPT_SGA };
     //                   TEL_IAC, TELCMD_DO, TELOPT_BIN,
     //                   TEL_IAC, TELCMD_WILL, TELOPT_BIN };
 
@@ -1991,7 +2622,7 @@ void doHelp( void ) {
                Tcp::Packets_Sent, Tcp::Packets_Received, Tcp::Packets_Retransmitted,
                Tcp::Packets_SeqOrAckError, Tcp::Packets_DroppedNoSpace );
   s.myCprintf( 0, 15, scNormal, "Packets: Sent: %lu Rcvd: %lu Dropped: %lu SendErrs: LowFreeBufs: %u",
-	   Packets_sent, Packets_received, Packets_dropped, Packets_send_errs, Buffer_lowFreeCount );
+           Packets_sent, Packets_received, Packets_dropped, Packets_send_errs, Buffer_lowFreeCount );
 
   s.repeatCh( 0, 18, scBorder, 205, s.terminalCols );
 
@@ -2017,6 +2648,7 @@ static void usage( void ) {
     printf( HelpText[i] );
     i++;
   }
+  mouse_hide();
   exit( 1 );
 }
 
@@ -2051,20 +2683,20 @@ static void parseArgs( int argc, char *argv[] ) {
     else if ( stricmp( argv[i], "-sessiontype" ) == 0 ) {
       i++;
       if ( i == argc ) {
-	puts( "Must specify a session type with the -sessiontype option" );
-	usage( );
+        puts( "Must specify a session type with the -sessiontype option" );
+        usage( );
       }
       if ( stricmp( argv[i], "raw" ) == 0 ) {
-	RawOrTelnet = false;
-	RawOrTelnetForced = true;
+        RawOrTelnet = false;
+        RawOrTelnetForced = true;
       }
       else if ( stricmp( argv[i], "telnet" ) == 0 ) {
-	RawOrTelnet = true;
-	RawOrTelnetForced = true;
+        RawOrTelnet = true;
+        RawOrTelnetForced = true;
       }
       else {
-	puts( "Unknown session type specified on the -sessiontype option" );
-	usage( );
+        puts( "Unknown session type specified on the -sessiontype option" );
+        usage( );
       }
     }
     else {
@@ -2172,6 +2804,8 @@ static void shutdown( int rc ) {
   if ( s.Screen_base != NULL ) s.paint( );
 
   Utils::endStack( );
+  mouse_hide();
+  mouse_uninstall();
   exit( rc );
 }
 
@@ -2185,6 +2819,9 @@ static void shutdown( int rc ) {
 // processed.
 
 static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
+  if ( mouse.xterm_any && mouse.showing ){
+    mouse_hide();
+  }
 
   uint16_t i;
   for ( i=0; i < len; i++ ) {
@@ -2203,13 +2840,25 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
         csiParseState = LookForPrivateControl;
         traceBufferLen = 0;
 
-	StreamState = CSI_SEEN;
+        StreamState = CSI_SEEN;
+
+      }
+      else if ( recvBuffer[i] == ']' ) {
+
+        for ( uint16_t j = 0; j < CSI_ARGS; j++ ) parms[j] = CSI_DEFAULT_ARG;
+        parmsFound = 0;
+        oscParseState = LookForPs;
+        clipboardType = 's';
+        cutBuffer = 0;
+        clipboardStore = true;
+
+        StreamState = OSC_SEEN;
 
       }
       else {
-	// Esc char was eaten - return to normal processing.
+        // Esc char was eaten - return to normal processing.
 
-	StreamState = Normal;
+        StreamState = Normal;
 
         // We can handle simple one character escape sequences without
         // too much drama.
@@ -2228,17 +2877,27 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
       s.updateVidBufPtr( );
     }
 
+    else if ( StreamState == OSC_SEEN ) {
+
+      uint16_t rc = processOSCSeq( recvBuffer+i, (len-i) );
+
+      // Bump i by the number of *additional* bytes processed
+      i = i + rc - 1;
+
+      //s.updateVidBufPtr( );
+    }
+
     else if ( StreamState == IAC_SEEN ) {
 
       if ( MyTelnetOpts.isRmtOn( TELOPT_BIN ) && recvBuffer[i] == TEL_IAC ) {
-	// Treat has a normal character.  This is ugly, but should
-	// also be rare.
-	s.add( (char *)(recvBuffer+i), 1 );
+        // Treat has a normal character.  This is ugly, but should
+        // also be rare.
+        s.add( (char *)(recvBuffer+i), 1 );
       }
       else {
 
-	// It really is a telnet command ...
-	int16_t rc = processTelnetCmds( recvBuffer+i, (len-i) );
+        // It really is a telnet command ...
+        int16_t rc = processTelnetCmds( recvBuffer+i, (len-i) );
 
         // If a telnet option is processed move 'i' forward the correct
         // number of chars.  Keep in mind that TEL_IAC has already been
@@ -2258,13 +2917,13 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
         // and that will be detected soon enough.
 
         if ( rc == 0 ) {
-	  // Ran out of data in the buffer!
-	  // Move data and break the loop.
-	  memmove( recvBuffer, recvBuffer+i, (len-i) );
-	  break;
+          // Ran out of data in the buffer!
+          // Move data and break the loop.
+          memmove( recvBuffer, recvBuffer+i, (len-i) );
+          break;
         } else if ( rc > 0 ) {
-	  i = i + (rc-1);
-	}
+          i = i + (rc-1);
+        }
 
       }
 
@@ -2275,17 +2934,17 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
     else {
 
       if ( (RawOrTelnet) && recvBuffer[i] == TEL_IAC ) {
-	StreamState = IAC_SEEN;
+        StreamState = IAC_SEEN;
       }
 
       else if ( recvBuffer[i] == 27 ) {
         s.suppressOverhang( );
-	StreamState = ESC_SEEN;
+        StreamState = ESC_SEEN;
       }
 
       else {
 
-	// Not a telnet or an ESC code.  Do screen handling here.
+        // Not a telnet or an ESC code.  Do screen handling here.
 
         // This is a lot of overhead for just one character.  Scan
         // ahead to see if we can do a few characters to improve
@@ -2302,6 +2961,9 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
 
   }  // end for
 
+  if ( mouse.xterm_any && mouse.should_show ){
+    mouse_show();
+  }
   return (len - i);
 }
 
@@ -2462,32 +3124,32 @@ static int16_t processSingleTelnetCmd( uint8_t *cmdStr, uint8_t inputBytes, uint
       if ( cmdTableIndex >= TEL_OPTIONS ) cmdTableIndex = TEL_OPTIONS-1;
 
       if ( DebugTelnet ) {
-	debugMsgLen = sprintf( debugMsg, "Received WILL %u, ", cmd );
+        debugMsgLen = sprintf( debugMsg, "Received WILL %u, ", cmd );
       }
 
       if ( MyTelnetOpts.isWantRmtOn( cmdTableIndex ) ) {
-	respCmd = TELCMD_DO;
-	MyTelnetOpts.setRmtOn( cmdTableIndex );
+        respCmd = TELCMD_DO;
+        MyTelnetOpts.setRmtOn( cmdTableIndex );
       }
       else {
-	respCmd = TELCMD_DONT;
-	MyTelnetOpts.setRmtOff( cmdTableIndex );
+        respCmd = TELCMD_DONT;
+        MyTelnetOpts.setRmtOff( cmdTableIndex );
       }
 
       if ( MyTelnetOpts.isDoOrDontPending( cmdTableIndex ) ) {
-	MyTelnetOpts.clrDoOrDontPending( cmdTableIndex );
-	if ( DebugTelnet ) {
-	  debugMsgLen += sprintf( debugMsg+debugMsgLen, DoOrDontPendingErrMsg );
-	}
+        MyTelnetOpts.clrDoOrDontPending( cmdTableIndex );
+        if ( DebugTelnet ) {
+          debugMsgLen += sprintf( debugMsg+debugMsgLen, DoOrDontPendingErrMsg );
+        }
       }
       else {
-	outputBuf[0] = TEL_IAC;
-	outputBuf[1] = respCmd;
-	outputBuf[2] = cmd;
-	localOutputBufLen = 3;
-	if ( DebugTelnet ) {
-	  debugMsgLen += sprintf( debugMsg+debugMsgLen, "Sent %s\n", (respCmd==TELCMD_DO?"DO":"DONT") );
-	}
+        outputBuf[0] = TEL_IAC;
+        outputBuf[1] = respCmd;
+        outputBuf[2] = cmd;
+        localOutputBufLen = 3;
+        if ( DebugTelnet ) {
+          debugMsgLen += sprintf( debugMsg+debugMsgLen, "Sent %s\n", (respCmd==TELCMD_DO?"DO":"DONT") );
+        }
       }
 
       break;
@@ -2510,7 +3172,7 @@ static int16_t processSingleTelnetCmd( uint8_t *cmdStr, uint8_t inputBytes, uint
       if ( cmdTableIndex >= TEL_OPTIONS ) cmdTableIndex = TEL_OPTIONS-1;
 
       if ( DebugTelnet ) {
-	debugMsgLen = sprintf( debugMsg, "Received WONT %u, ", cmd );
+        debugMsgLen = sprintf( debugMsg, "Received WONT %u, ", cmd );
       }
 
       // Our only valid response is DONT
@@ -2518,19 +3180,19 @@ static int16_t processSingleTelnetCmd( uint8_t *cmdStr, uint8_t inputBytes, uint
       MyTelnetOpts.setRmtOff( cmdTableIndex );
 
       if ( MyTelnetOpts.isDoOrDontPending( cmdTableIndex ) ) {
-	MyTelnetOpts.clrDoOrDontPending( cmdTableIndex );
-	if ( DebugTelnet ) {
-	  debugMsgLen += sprintf( debugMsg+debugMsgLen, DoOrDontPendingErrMsg );
-	}
+        MyTelnetOpts.clrDoOrDontPending( cmdTableIndex );
+        if ( DebugTelnet ) {
+          debugMsgLen += sprintf( debugMsg+debugMsgLen, DoOrDontPendingErrMsg );
+        }
       }
       else {
-	outputBuf[0] = TEL_IAC;
-	outputBuf[1] = TELCMD_DONT;
-	outputBuf[2] = cmd;
-	localOutputBufLen = 3;
-	if ( DebugTelnet ) {
-	  debugMsgLen += sprintf( debugMsg+debugMsgLen, "Sent DONT\n" );
-	}
+        outputBuf[0] = TEL_IAC;
+        outputBuf[1] = TELCMD_DONT;
+        outputBuf[2] = cmd;
+        localOutputBufLen = 3;
+        if ( DebugTelnet ) {
+          debugMsgLen += sprintf( debugMsg+debugMsgLen, "Sent DONT\n" );
+        }
       }
 
       break;
@@ -2554,45 +3216,45 @@ static int16_t processSingleTelnetCmd( uint8_t *cmdStr, uint8_t inputBytes, uint
       if ( cmdTableIndex >= TEL_OPTIONS ) cmdTableIndex = TEL_OPTIONS-1;
 
       if ( DebugTelnet ) {
-	debugMsgLen = sprintf( debugMsg, "Received DO   %u, ", cmd );
+        debugMsgLen = sprintf( debugMsg, "Received DO   %u, ", cmd );
       }
 
       if ( MyTelnetOpts.isWantLclOn( cmdTableIndex ) ) {
-	respCmd = TELCMD_WILL;
-	MyTelnetOpts.setLclOn( cmdTableIndex );
+        respCmd = TELCMD_WILL;
+        MyTelnetOpts.setLclOn( cmdTableIndex );
       }
       else {
-	respCmd = TELCMD_WONT;
-	MyTelnetOpts.setLclOff( cmdTableIndex );
+        respCmd = TELCMD_WONT;
+        MyTelnetOpts.setLclOff( cmdTableIndex );
       }
 
       if ( MyTelnetOpts.isWillOrWontPending( cmdTableIndex ) ) {
-	MyTelnetOpts.clrWillOrWontPending( cmdTableIndex );
-	if ( DebugTelnet ) {
-	  debugMsgLen += sprintf( debugMsg+debugMsgLen, DoOrDontPendingErrMsg );
-	}
+        MyTelnetOpts.clrWillOrWontPending( cmdTableIndex );
+        if ( DebugTelnet ) {
+          debugMsgLen += sprintf( debugMsg+debugMsgLen, DoOrDontPendingErrMsg );
+        }
       }
       else {
-	outputBuf[0] = TEL_IAC;
-	outputBuf[1] = respCmd;
-	outputBuf[2] = cmd;
-	localOutputBufLen = 3;
-	if ( DebugTelnet ) {
-	  debugMsgLen += sprintf( debugMsg+debugMsgLen, "Sent %s\n", (respCmd==TELCMD_WILL?"WILL":"WONT") );
-	}
+        outputBuf[0] = TEL_IAC;
+        outputBuf[1] = respCmd;
+        outputBuf[2] = cmd;
+        localOutputBufLen = 3;
+        if ( DebugTelnet ) {
+          debugMsgLen += sprintf( debugMsg+debugMsgLen, "Sent %s\n", (respCmd==TELCMD_WILL?"WILL":"WONT") );
+        }
       }
 
       if ( cmd == TELOPT_WINDSIZE && respCmd == TELCMD_WILL ) {
-	outputBuf[3] = TEL_IAC;
-	outputBuf[4] = TELCMD_SUBOPT_BEGIN;
-	outputBuf[5] = TELOPT_WINDSIZE;
-	outputBuf[6] = 0;
-	outputBuf[7] = s.terminalCols;
-	outputBuf[8] = 0;
-	outputBuf[9] = s.terminalLines;
-	outputBuf[10] = TEL_IAC;
-	outputBuf[11] = TELCMD_SUBOPT_END;
-	localOutputBufLen = 12;
+        outputBuf[3] = TEL_IAC;
+        outputBuf[4] = TELCMD_SUBOPT_BEGIN;
+        outputBuf[5] = TELOPT_WINDSIZE;
+        outputBuf[6] = 0;
+        outputBuf[7] = s.terminalCols;
+        outputBuf[8] = 0;
+        outputBuf[9] = s.terminalLines;
+        outputBuf[10] = TEL_IAC;
+        outputBuf[11] = TELCMD_SUBOPT_END;
+        localOutputBufLen = 12;
       }
 
 
@@ -2616,7 +3278,7 @@ static int16_t processSingleTelnetCmd( uint8_t *cmdStr, uint8_t inputBytes, uint
       if ( cmdTableIndex >= TEL_OPTIONS ) cmdTableIndex = TEL_OPTIONS-1;
 
       if ( DebugTelnet ) {
-	debugMsgLen = sprintf( debugMsg, "Received DONT %u, ", cmd );
+        debugMsgLen = sprintf( debugMsg, "Received DONT %u, ", cmd );
       }
 
       // Our only valid response is WONT
@@ -2624,19 +3286,19 @@ static int16_t processSingleTelnetCmd( uint8_t *cmdStr, uint8_t inputBytes, uint
       MyTelnetOpts.setLclOff( cmdTableIndex );
 
       if ( MyTelnetOpts.isWillOrWontPending( cmdTableIndex ) ) {
-	MyTelnetOpts.clrWillOrWontPending( cmdTableIndex );
-	if ( DebugTelnet ) {
-	  debugMsgLen += sprintf( debugMsg+debugMsgLen, DoOrDontPendingErrMsg );
-	}
+        MyTelnetOpts.clrWillOrWontPending( cmdTableIndex );
+        if ( DebugTelnet ) {
+          debugMsgLen += sprintf( debugMsg+debugMsgLen, DoOrDontPendingErrMsg );
+        }
       }
       else {
-	outputBuf[0] = TEL_IAC;
-	outputBuf[1] = TELCMD_WONT;
-	outputBuf[2] = cmd;
-	localOutputBufLen = 3;
-	if ( DebugTelnet ) {
-	  debugMsgLen += sprintf( debugMsg+debugMsgLen, "Sent WONT\n" );
-	}
+        outputBuf[0] = TEL_IAC;
+        outputBuf[1] = TELCMD_WONT;
+        outputBuf[2] = cmd;
+        localOutputBufLen = 3;
+        if ( DebugTelnet ) {
+          debugMsgLen += sprintf( debugMsg+debugMsgLen, "Sent WONT\n" );
+        }
       }
 
       break;
@@ -2651,39 +3313,39 @@ static int16_t processSingleTelnetCmd( uint8_t *cmdStr, uint8_t inputBytes, uint
 
       uint16_t suboptEndIndex = 0;
       for ( uint16_t i=1; i < inputBytes-1; i++ ) {
-	if ( cmdStr[i] == TEL_IAC && cmdStr[i+1] == TELCMD_SUBOPT_END ) {
-	  inputBytesConsumed = i + 2;
-	  suboptEndIndex = i;
-	}
+        if ( cmdStr[i] == TEL_IAC && cmdStr[i+1] == TELCMD_SUBOPT_END ) {
+          inputBytesConsumed = i + 2;
+          suboptEndIndex = i;
+        }
       }
 
       if ( suboptEndIndex < 3 ) return 0;
 
       if ( (suboptEndIndex == 3) && (cmdStr[1] == TELOPT_TERMTYPE) ) {
 
-	if ( cmdStr[2] == 1 && cmdStr[3] == TEL_IAC && cmdStr[4] == TELCMD_SUBOPT_END ) {
-	  outputBuf[0] = TEL_IAC;
-	  outputBuf[1] = TELCMD_SUBOPT_BEGIN;
-	  outputBuf[2] = TELOPT_TERMTYPE;
-	  outputBuf[3] = 0;
+        if ( cmdStr[2] == 1 && cmdStr[3] == TEL_IAC && cmdStr[4] == TELCMD_SUBOPT_END ) {
+          outputBuf[0] = TEL_IAC;
+          outputBuf[1] = TELCMD_SUBOPT_BEGIN;
+          outputBuf[2] = TELOPT_TERMTYPE;
+          outputBuf[3] = 0;
 
-	  localOutputBufLen = 4;
+          localOutputBufLen = 4;
 
           char *tmp = TermType;
           while (*tmp) outputBuf[localOutputBufLen++] = *tmp++;
 
-	  outputBuf[localOutputBufLen++] = TEL_IAC;
-	  outputBuf[localOutputBufLen++] = TELCMD_SUBOPT_END;
-	  if ( DebugTelnet ) {
-	    debugMsgLen = sprintf( debugMsg, "Sent termtype %s\n", TermType );
-	  }
-	}
+          outputBuf[localOutputBufLen++] = TEL_IAC;
+          outputBuf[localOutputBufLen++] = TELCMD_SUBOPT_END;
+          if ( DebugTelnet ) {
+            debugMsgLen = sprintf( debugMsg, "Sent termtype %s\n", TermType );
+          }
+        }
 
       }
       else {
-	if ( DebugTelnet ) {
-	  debugMsgLen += sprintf( debugMsg+debugMsgLen, "Unknown SUBOPT: %u\n", cmdStr[2] );
-	}
+        if ( DebugTelnet ) {
+          debugMsgLen += sprintf( debugMsg+debugMsgLen, "Unknown SUBOPT: %u\n", cmdStr[2] );
+        }
       }
 
       break;
@@ -2699,7 +3361,7 @@ static int16_t processSingleTelnetCmd( uint8_t *cmdStr, uint8_t inputBytes, uint
     case TELCMD_AO:    // Abort output
     {
       if ( DebugTelnet ) {
-	debugMsgLen = sprintf( debugMsg, "Telnet: Ignored command: %u\n", cmdStr[0] );
+        debugMsgLen = sprintf( debugMsg, "Telnet: Ignored command: %u\n", cmdStr[0] );
       }
       break;
     }
@@ -2714,7 +3376,7 @@ static int16_t processSingleTelnetCmd( uint8_t *cmdStr, uint8_t inputBytes, uint
 
     default: {
       if ( DebugTelnet ) {
-	debugMsgLen = sprintf( debugMsg, "Telnet: Unprocessed Command: %u\n", cmdStr[0] );
+        debugMsgLen = sprintf( debugMsg, "Telnet: Unprocessed Command: %u\n", cmdStr[0] );
       }
     }
 
@@ -2805,9 +3467,9 @@ static uint16_t processCSISeq( uint8_t *buffer, uint16_t len ) {
         // If this is the first character of the new parameter initialize
         // the parameter to zero.  (Parameters are always positive integers.)
 
-	if ( parms[ parmsFound ] == CSI_DEFAULT_ARG ) parms[ parmsFound ] = 0;
+        if ( parms[ parmsFound ] == CSI_DEFAULT_ARG ) parms[ parmsFound ] = 0;
 
-	parms[ parmsFound ] = parms[ parmsFound ] * 10 + c - '0';
+        parms[ parmsFound ] = parms[ parmsFound ] * 10 + c - '0';
 
       }
 
@@ -2827,9 +3489,9 @@ static uint16_t processCSISeq( uint8_t *buffer, uint16_t len ) {
 
         if ( csiParseState == ParmsFound && ( parmsFound < CSI_ARGS ) ) parmsFound++;
 
-	commandLetter = c;
+        commandLetter = c;
         i++;
-	break;
+        break;
     }
 
     i++;
@@ -2864,11 +3526,84 @@ static uint16_t processCSISeq( uint8_t *buffer, uint16_t len ) {
   // never knows when to set StreamState back to normal.
   StreamState = Normal;
 
-
   return bytesProcessed;
 }
 
+static uint16_t processOSCSeq( uint8_t *buffer, uint16_t len ) {
+  uint16_t bytesProcessed = 0;
 
+  uint8_t commandLetter = 0;
+
+  uint16_t i = 0;
+  uint16_t j = 0;
+  while ( i < len ) {
+
+    uint8_t c = buffer[i];
+
+    if ( c == 7 ){
+      commandLetter = c;
+      i++;
+      break;
+    }
+    if ( c == 0x1b && ( i + 1 < len ) && buffer[i + 1] == 0x5c ){
+      commandLetter = c;
+      i += 2;
+      break;
+    }
+    else if ( c == ';' ) {
+      if ( parmsFound < CSI_ARGS ) parmsFound++;
+      if ( oscParseState == LookForPs ){
+        oscParseState = LookForClipboardCode;
+      }
+      else if ( oscParseState == LookForClipboardCode ){
+        oscParseState = LookForData;
+      }
+    }
+    else if ( oscParseState == LookForPs ){
+      if ( isdigit( c ) ) {
+        if ( parms[ parmsFound ] == CSI_DEFAULT_ARG ) parms[ parmsFound ] = 0;
+
+        parms[ parmsFound ] = parms[ parmsFound ] * 10 + c - '0';
+      }
+    }
+    else if ( oscParseState == LookForClipboardCode ){
+      if ( isdigit( c ) ) {
+        cutBuffer = c - '0';
+      }
+      else {
+        clipboardType = c;
+      }
+    }
+    else if ( oscParseState == LookForData ){
+      if ( c == '?' ){
+        clipboardStore = false;
+      }
+      incomingClipboard[j++] = c;
+    }
+    i++;
+  }
+
+  bytesProcessed = i;
+
+  if ( commandLetter == 0 ) return bytesProcessed;
+
+  StreamState = Normal;
+
+  if ( clipboardStore ){
+    if (j == 0){ // clear the selection
+      s.selection.buf[0] = 0;
+    }
+    else{
+      incomingClipboard[j++] = 0;
+      base64_decode(incomingClipboard, s.selection.buf, MAX_SELECTION_SIZE);
+    }
+  }
+  else{
+    needToSendSelection = true;
+  }
+
+  return bytesProcessed;
+}
 
 
 // This can be inline because it is just called from one place.  It saves
@@ -3003,8 +3738,8 @@ void processAnsiCommand( uint8_t commandLetter ) {
     case 'I': {
       if ( parms[0] == CSI_DEFAULT_ARG ) parms[0] = 1;
       for ( uint16_t i=0; i < parms[0]; i++ ) {
-	int16_t newCursor_x = (s.cursor_x + 8) & 0xF8;
-	if ( newCursor_x < s.terminalCols ) s.cursor_x = newCursor_x;
+        int16_t newCursor_x = (s.cursor_x + 8) & 0xF8;
+        if ( newCursor_x < s.terminalCols ) s.cursor_x = newCursor_x;
       }
       break;
     }
@@ -3018,17 +3753,17 @@ void processAnsiCommand( uint8_t commandLetter ) {
       if ( parms[0] == CSI_DEFAULT_ARG ) parms[0] = 1;
       for ( uint16_t i=0; i < parms[0]; i++ ) {
 
-	int16_t newCursor_x;
-	if ( ((s.cursor_x & 0xF8) == s.cursor_x) && (s.cursor_x>0) ) {
-	  // Already at a tab stop boundary, go back eight
-	  newCursor_x = s.cursor_x - 8;
-	}
-	else {
-	  // Not on a tab stop boundary - just round down
-	  newCursor_x = s.cursor_x & 0xF8;
-	}
+        int16_t newCursor_x;
+        if ( ((s.cursor_x & 0xF8) == s.cursor_x) && (s.cursor_x>0) ) {
+          // Already at a tab stop boundary, go back eight
+          newCursor_x = s.cursor_x - 8;
+        }
+        else {
+          // Not on a tab stop boundary - just round down
+          newCursor_x = s.cursor_x & 0xF8;
+        }
 
-	if ( newCursor_x >= 0 ) s.cursor_x = newCursor_x;
+        if ( newCursor_x >= 0 ) s.cursor_x = newCursor_x;
       }
       break;
     }
@@ -3042,22 +3777,22 @@ void processAnsiCommand( uint8_t commandLetter ) {
     case 'J': {
       if ( parms[0] == CSI_DEFAULT_ARG ) parms[0] = 0;
       switch ( parms[0] ) {
-	case 0: {
-	  s.clear( s.cursor_x, s.cursor_y, s.terminalCols-1, s.terminalLines-1 );
-	  break;
-	}
-	case 1: {
-	  s.clear( 0, 0, s.cursor_x, s.cursor_y );
-	  break;
-	}
-	case 2: {
-	  s.clear( 0, 0, s.terminalCols-1, s.terminalLines-1 );
+        case 0: {
+          s.clear( s.cursor_x, s.cursor_y, s.terminalCols-1, s.terminalLines-1 );
+          break;
+        }
+        case 1: {
+          s.clear( 0, 0, s.cursor_x, s.cursor_y );
+          break;
+        }
+        case 2: {
+          s.clear( 0, 0, s.terminalCols-1, s.terminalLines-1 );
 
           // Putty does not seem to home the cursor
-	  // s.cursor_x = 0;
-	  // s.cursor_y = 0;
-	  break;
-	}
+          // s.cursor_x = 0;
+          // s.cursor_y = 0;
+          break;
+        }
       }
       break;
     }
@@ -3071,18 +3806,18 @@ void processAnsiCommand( uint8_t commandLetter ) {
     case 'K': {
       if ( parms[0] == CSI_DEFAULT_ARG ) parms[0] = 0;
       switch ( parms[0] ) {
-	case 0: {
-	  s.clear( s.cursor_x, s.cursor_y, s.terminalCols-1, s.cursor_y );
-	  break;
-	}
-	case 1: {
-	  s.clear( 0, s.cursor_y, s.cursor_x, s.cursor_y );
-	  break;
-	}
-	case 2: {
-	  s.clear( 0, s.cursor_y, s.terminalCols-1, s.cursor_y );
-	  break;
-	}
+        case 0: {
+          s.clear( s.cursor_x, s.cursor_y, s.terminalCols-1, s.cursor_y );
+          break;
+        }
+        case 1: {
+          s.clear( 0, s.cursor_y, s.cursor_x, s.cursor_y );
+          break;
+        }
+        case 2: {
+          s.clear( 0, s.cursor_y, s.terminalCols-1, s.cursor_y );
+          break;
+        }
       }
       break;
     }
@@ -3136,52 +3871,52 @@ void processAnsiCommand( uint8_t commandLetter ) {
     case 'm': {
 
       if ( parmsFound == 0 ) {
-	parmsFound = 1;
-	parms[0] = 0;
+        parmsFound = 1;
+        parms[0] = 0;
       }
 
       for ( uint16_t p=0; p < parmsFound; p++ ) {
-	if ( parms[p] >= 30 && parms[p] < 40 ) {
-	  fg = fgColorMap[ parms[p] - 30 ];
-	}
-	else if ( parms[p] >= 40 ) {
-	  bg = bgColorMap[ parms[p] - 40 ];
-	}
-	else {
-	  switch ( parms[p] ) {
+        if ( parms[p] >= 30 && parms[p] < 40 ) {
+          fg = fgColorMap[ parms[p] - 30 ];
+        }
+        else if ( parms[p] >= 40 ) {
+          bg = bgColorMap[ parms[p] - 40 ];
+        }
+        else {
+          switch ( parms[p] ) {
 
-	    case 0: {
-	      reverse = bold = blink = bg = 0;
+            case 0: {
+              reverse = bold = blink = bg = 0;
               underline = false;
-	      fg = 7;
+              fg = 7;
               setBlockCursor( );
-	      break;
-	    }
+              break;
+            }
 
-	    case  1: { bold = 1; break; }          // Bold
-	    case  2: { bold = 0; break; }          // Faint
-	    case  3: { break; }                    // Italic
-	    case  4: { underline = true; break; }  // Underline
-	    case  5: { blink = 1; break; }         // Slow blink
-	    case  6: { blink = 1; break; }         // Fast blink
-	    case  7: { reverse = 1; break; }       // Reverse
-	    case  8: { break; }                    // Conceal
-	    case 21: { underline = true; break; }  // Double underline
-	    case 22: { bold = 0; break; }          // Normal intensity
-	    case 24: { underline = false; break; } // No underline
-	    case 25: { blink = 0; break; }         // Blink off
-	    case 27: { reverse = 0; break; }       // Reverse off
-	    case 28: { break; }                    // Conceal off
-	  }
-	}
+            case  1: { bold = 1; break; }          // Bold
+            case  2: { bold = 0; break; }          // Faint
+            case  3: { break; }                    // Italic
+            case  4: { underline = true; break; }  // Underline
+            case  5: { blink = 1; break; }         // Slow blink
+            case  6: { blink = 1; break; }         // Fast blink
+            case  7: { reverse = 1; break; }       // Reverse
+            case  8: { break; }                    // Conceal
+            case 21: { underline = true; break; }  // Double underline
+            case 22: { bold = 0; break; }          // Normal intensity
+            case 24: { underline = false; break; } // No underline
+            case 25: { blink = 0; break; }         // Blink off
+            case 27: { reverse = 0; break; }       // Reverse off
+            case 28: { break; }                    // Conceal off
+          }
+        }
       } // end for
 
       uint8_t newAttr;
       if ( ! reverse ) {
-	newAttr = (blink<<7) | (bg<<4) | (bold<<3) | fg;
+        newAttr = (blink<<7) | (bg<<4) | (bold<<3) | fg;
       }
       else {
-	newAttr = (blink<<7) | (fg<<4) | (bold<<3) | bg;
+        newAttr = (blink<<7) | (fg<<4) | (bold<<3) | bg;
       }
 
       if ( s.isColorCard( ) && underline ) newAttr = (blink<<7) | (bg<<4) | (bold<<3) | 0x01;
@@ -3211,26 +3946,26 @@ void processAnsiCommand( uint8_t commandLetter ) {
 
       switch( parms[0] ) {
 
-	case 5: {
+        case 5: {
 
-	  strcpy( tmpBuf, "\033[0n" );
-	  send( (uint8_t *)tmpBuf, 4 );
-	  break;
+          strcpy( tmpBuf, "\033[0n" );
+          send( (uint8_t *)tmpBuf, 4 );
+          break;
 
-	}
+        }
 
-	case 6: {
+        case 6: {
 
           int16_t tmpY = s.cursor_y + 1;
 
           // If origin mode is on adjust the row reporting.
           if ( s.originMode == true ) s.cursor_y = s.cursor_y - s.scrollRegion_top;
 
-	  int rcBytes = sprintf( tmpBuf, "\033[%d;%dR", tmpY, (s.cursor_x+1) );
-	  send( (uint8_t *)tmpBuf, rcBytes );
-	  break;
+          int rcBytes = sprintf( tmpBuf, "\033[%d;%dR", tmpY, (s.cursor_x+1) );
+          send( (uint8_t *)tmpBuf, rcBytes );
+          break;
 
-	}
+        }
       }
       break;
     }
@@ -3239,8 +3974,8 @@ void processAnsiCommand( uint8_t commandLetter ) {
       if ( parms[0] == CSI_DEFAULT_ARG ) parms[0] = 1;
 
       if ( parms[0] > s.terminalCols ) {
-	TRACE_WARN(( "Ansi: REP Command: parm (%u) > s.terminalCols\n", parms[0] ));
-	parms[0] = s.terminalCols;
+        TRACE_WARN(( "Ansi: REP Command: parm (%u) > s.terminalCols\n", parms[0] ));
+        parms[0] = s.terminalCols;
       }
 
       memset( tmpBuf, s.lastChar, parms[0] );
@@ -3351,10 +4086,23 @@ void processDecPrivateControl( uint8_t commandLetter ) {
           s.autoWrap = true;
         } else if ( parms[i] == 25 ) {
           setBlockCursor( );
+        } else if ( parms[i] == 1000 ) {
+          mouse.xterm_normal = true;
+        } else if ( parms[i] == 1002 ) {
+          mouse.xterm_motion = true;
+        } else if ( parms[i] == 1006 ) {
+          mouse.xterm_sgr = true;
+        } else if ( parms[i] == 2004 ) {
+          mouse.bracketed_paste = true;
+        }
+        if ( mouse.xterm_normal || mouse.xterm_sgr || mouse.xterm_motion ){
+          mouse.xterm_any = true;
+        }
+        else{
+          mouse.xterm_any = false;
         }
 
       }
-
       break;
     }
 
@@ -3368,8 +4116,22 @@ void processDecPrivateControl( uint8_t commandLetter ) {
           s.autoWrap = false;
         } else if ( parms[i] == 25 ) {
           hideCursor( );
+        } else if ( parms[i] == 1000 ) {
+          mouse.xterm_normal = false;
+        } else if ( parms[i] == 1002 ) {
+          mouse.xterm_motion = false;
+        } else if ( parms[i] == 1006 ) {
+          mouse.xterm_sgr = false;
+        } else if ( parms[i] == 2004 ) {
+          mouse.bracketed_paste = false;
         }
-
+        if ( mouse.xterm_normal || mouse.xterm_sgr || mouse.xterm_motion ){
+          mouse.xterm_any = true;
+        }
+        else{
+          mouse.xterm_any = false;
+          mouse_hide();
+        }
       }
 
       break;
