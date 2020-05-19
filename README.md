@@ -152,33 +152,11 @@ Modify your `.bashrc` to add the following before the part that
 references `force_color_prompt`:
 
     if [ "$TERM" = "ansi" ]; then
-        export LC_ALL=C
         force_color_prompt=yes
     fi
 
 If you would prefer a monochrome prompt, leave out
 `force_color_prompt=yes`.
-
-Things might work fine without the `LC_ALL=C`.  It helps to turn off
-Unicode characters that might render as `¿`.
-
-Instead of `LC_ALL=C`, you could try `LC_ALL=en_US.ISO-8859-1`.  Note
-that you may first need to run `sudo dpkg-reconfigure locales` and
-install the `en_US.ISO-8859-1` locale.  The `ISO-8859-1` character set
-supports the "extended ASCII" codes 128-255, which the PC can display.
-Applications that support this character set include:
-
-* Midnight Commander
-* `tree -S`
-* Nethack with the `symset` set to `IBMGraphics`.
-
-Not all applications will respect the `LC_ALL` environment variable.
-Some applications might still send Unicode into your terminal.
-
-Depending on the application, it might be perfectly fine to refrain
-from setting `LC_ALL` and allowing a default locale (e.g.,
-`en_US.utf8`) to send Unicode to the Telnet application.  The
-translation between Unicode and [Code Page 437] may be sufficient.
 
 ## Compiling
 

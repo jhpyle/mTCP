@@ -52,6 +52,7 @@
    2019-11-20: Terminal emulation bug fixes.
    2020-05-10: Extended keyboard support.
    2020-05-17: Mouse support.
+   2020-05-18: Fixed bug with Unicode characters at end of buffer.
 
    Todo:
 
@@ -96,6 +97,7 @@
 
 // Buffer lengths
 
+#define NOTRACE
 #define SERVER_NAME_MAXLEN   (80)
 #define TCP_RECV_BUF_SIZE  (4096)
 #define RECV_BUF_SIZE      (2048)
@@ -139,6 +141,7 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len );
 
 static uint16_t processCSISeq( uint8_t *buffer, uint16_t len );
 static uint16_t processOSCSeq( uint8_t *buffer, uint16_t len );
+static uint16_t processUTF3Seq( uint8_t *buffer, uint16_t len );
 inline void     processAnsiCommand( uint8_t commandLetter );
 static void     processDecPrivateControl( uint8_t commandLetter );
 static void     processNonCSIEscSeq( uint8_t ch );
@@ -160,6 +163,8 @@ static void     doHelp( void );
 
 static void     send( uint8_t *userBuf, uint16_t userBufLen );
 
+char utf_chars[3];
+uint8_t utf_chars_seen;
 
 char base64_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -283,7 +288,7 @@ TelnetOpts MyTelnetOpts;
 
 Screen s;
 
-enum StreamStates { Normal = 0, ESC_SEEN, CSI_SEEN, OSC_SEEN, IAC_SEEN };
+enum StreamStates { Normal = 0, ESC_SEEN, CSI_SEEN, OSC_SEEN, IAC_SEEN, UTF2_SEEN, UTF3_SEEN };
 StreamStates StreamState;
 
 
@@ -2886,6 +2891,20 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
 
       //s.updateVidBufPtr( );
     }
+    else if ( StreamState == UTF2_SEEN ) {
+
+      utf_chars[1] = recvBuffer[i];
+      s.add( utf_chars, 2 );
+      StreamState = Normal;
+
+    }
+    else if ( StreamState == UTF3_SEEN ) {
+
+      uint16_t rc = processUTF3Seq( recvBuffer+i, (len-i) );
+
+      i = i + rc - 1;
+
+    }
 
     else if ( StreamState == IAC_SEEN ) {
 
@@ -2942,6 +2961,17 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
         StreamState = ESC_SEEN;
       }
 
+      else if ( recvBuffer[i] >= 0xe0 ) {
+        StreamState = UTF3_SEEN;
+        utf_chars[0] = recvBuffer[i];
+        utf_chars_seen = 1;
+      }
+
+      else if ( recvBuffer[i] >= 0x7f ) {
+        StreamState = UTF2_SEEN;
+        utf_chars[0] = recvBuffer[i];
+      }
+
       else {
 
         // Not a telnet or an ESC code.  Do screen handling here.
@@ -2949,9 +2979,11 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
         // This is a lot of overhead for just one character.  Scan
         // ahead to see if we can do a few characters to improve
         // performance.
+        //
+
 
         uint16_t bufLen = 1;
-        while ( (i+bufLen < len) && (recvBuffer[i+bufLen] != 27) && (recvBuffer[i+bufLen] != TEL_IAC) ) bufLen++;
+        while ( (i+bufLen < len) && (recvBuffer[i+bufLen] != 27) && (recvBuffer[i+bufLen] < 0x7f) && (recvBuffer[i+bufLen] != TEL_IAC) ) bufLen++;
         s.add( (char *)(recvBuffer+i), bufLen );
         i = i + bufLen - 1;
 
@@ -3392,9 +3424,19 @@ static int16_t processSingleTelnetCmd( uint8_t *cmdStr, uint8_t inputBytes, uint
 
 }
 
-
-
-
+static uint16_t processUTF3Seq( uint8_t *buffer, uint16_t len ) {
+  uint16_t bytesProcessed = 0;
+  while ( bytesProcessed < len && utf_chars_seen < 3 ) {
+    utf_chars[utf_chars_seen] = buffer[bytesProcessed];
+    utf_chars_seen++;
+    bytesProcessed++;
+  }
+  if ( utf_chars_seen == 3 ){
+    s.add( utf_chars, 3 );
+    StreamState = Normal;
+  }
+  return bytesProcessed;
+}
 
 // CSI [p] c             0 or 1 parms
 // CSI [p] ; [p] c       2 parms
@@ -3506,8 +3548,8 @@ static uint16_t processCSISeq( uint8_t *buffer, uint16_t len ) {
   traceBuffer[traceBufferLen] = 0;
   traceBufferLen = 0;
 
-  TRACE(( "Ansi: Found: %d  Parms: %d %d %d %d %d %d\n", parmsFound,
-          parms[0], parms[1], parms[2], parms[3], parms[4], parms[5] ));
+  //TRACE(( "Ansi: Found: %d  Parms: %d %d %d %d %d %d\n", parmsFound,
+  //        parms[0], parms[1], parms[2], parms[3], parms[4], parms[5] ));
 
   if ( decPrivateControl == true ) {
     processDecPrivateControl( commandLetter );
@@ -3516,10 +3558,10 @@ static uint16_t processCSISeq( uint8_t *buffer, uint16_t len ) {
     processAnsiCommand( commandLetter );
   }
 
-  if ( DebugAnsi ) {
-    TRACE(( "Ansi: Old cur: (%02d,%02d) New cur: (%02d,%02d) Attr: %04x Cmd: %s\n",
-            start_cursor_x, start_cursor_y, s.cursor_x, s.cursor_y, s.curAttr, traceBuffer ));
-  }
+  //if ( DebugAnsi ) {
+  //  TRACE(( "Ansi: Old cur: (%02d,%02d) New cur: (%02d,%02d) Attr: %04x Cmd: %s\n",
+  //          start_cursor_x, start_cursor_y, s.cursor_x, s.cursor_y, s.curAttr, traceBuffer ));
+  //}
 
   // Set this here instead in the routine that called us.
   // Because we remember state across calls, the routine that called us

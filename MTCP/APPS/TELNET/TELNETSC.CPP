@@ -748,7 +748,7 @@ void Screen::add( char *buf, uint16_t len ) {
       case 0x2194: { c = 0x1d; break; }
       case 0x25b2: { c = 0x1e; break; }
       case 0x25bc: { c = 0x1f; break; }
-      case 0x2302: { c = 0x7f; break; }
+      case 0x2302: { c = 0x7f; unspecial = false; break; }
       case 0x00c7: { c = 0x80; break; }
       case 0x00fc: { c = 0x81; break; }
       case 0x00e9: { c = 0x82; break; }
@@ -775,6 +775,7 @@ void Screen::add( char *buf, uint16_t len ) {
       case 0x00f9: { c = 0x97; break; }
       case 0x00ff: { c = 0x98; break; }
       case 0x00d6: { c = 0x99; break; }
+      case 0x00d7: { c = 0x78; break; }
       case 0x00dc: { c = 0x9a; break; }
       case 0x00a2: { c = 0x9b; break; }
       case 0x00a3: { c = 0x9c; break; }
