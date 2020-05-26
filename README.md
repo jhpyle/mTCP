@@ -2,13 +2,13 @@
 
 This is an unofficial fork of [mTCP] by Michael B. Brutman.
 
-This fork makes minor changes to the Telnet application in order to
-make Telnet more usable for connecting to Linux machines.  It adds:
+This fork makes the Telnet application in [mTCP] more usable when
+connecting to Linux machines.  It adds:
 
 * Extended keyboard support
 * Mouse and clipboard support
-* Unicode translation
-* Ability to view graphics images
+* Translation of incoming Unicode characters
+* [Sixel graphics]
 
 The recompiled binary is available as the [TELNET.EXE] file, which is
 in the [APPS/TELNET] directory.  It is based on Mr. Brutman's
@@ -91,30 +91,30 @@ for displaying images in MCGA or CGA graphics modes.
 
 Display an image in 256 colors:
 
-   show my_image.png
+    show my_image.png
 
 Take a picture with `/dev/video0` and then display it:
 
-   show --me
+    show --me
 
 Display an image in monochrome:
 
-   show --mono my_mono_image.png
+    show --mono my_mono_image.png
 
 Display an image in monochrome if you have CGA graphics only:
 
-   show --mono --cga my_mono_image.png
+    show --mono --cga my_mono_image.png
 
 Display an image in a four-color CGA mode:
 
-   show --colors CyanMagenta my_image.png
-   show --colors LightCyanMagenta my_image.png
-   show --colors GreenRed my_image.png
-   show --colors LightGreenRed my_image.png
+    show --colors CyanMagenta my_image.png
+    show --colors LightCyanMagenta my_image.png
+    show --colors GreenRed my_image.png
+    show --colors LightGreenRed my_image.png
 
 Show the usage instructions:
 
-   show --help
+    show --help
 
 ## Compatibility
 
