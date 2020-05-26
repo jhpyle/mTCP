@@ -2,9 +2,13 @@
 
 This is an unofficial fork of [mTCP] by Michael B. Brutman.
 
-This fork makes minor changes to the Telnet application to extend the
-features of the "ANSI" terminal emulation in order to make Telnet more
-usable for connecting to Linux machines.
+This fork makes minor changes to the Telnet application in order to
+make Telnet more usable for connecting to Linux machines.  It adds:
+
+* Extended keyboard support
+* Mouse and clipboard support
+* Unicode translation
+* Ability to view graphics images
 
 The recompiled binary is available as the [TELNET.EXE] file, which is
 in the [APPS/TELNET] directory.  It is based on Mr. Brutman's
@@ -37,8 +41,8 @@ this version, that function is moved to the Alt-Page Up and Alt-Page
 Down keys (or Ctrl-Page Up and Ctrl-Page Dn with [TEL8088.EXE]), and
 Page Up and Page Down are passed through to the server.
 
-For compatibility with Emacs, all Alt-(key) combinations that are not
-used by [mTCP] Telnet application are passed through as ESC-(key).
+For compatibility with [Emacs], all Alt-(key) combinations that are
+not used by [mTCP] Telnet application are passed through as ESC-(key).
 
 The Delete key is passed through as `ESC [ 3 ~` instead of the default
 of character 127.
@@ -73,6 +77,44 @@ be available as part of your DOS system) before running [TELNET.EXE].
 
 If UTF-8 characters are received, they are translated if possible to
 [Code Page 437], but if no translation is available, `¿` is printed.
+Translation does take place when sending keys to Telnet.
+
+### Graphics
+
+If a [Sixel graphics] escape sequence is encountered, the image will be
+processed and displayed on the screen.  The user can then press any
+key to get back to text mode.
+
+For best results, use the [show] script on Linux to display images.
+This script calls the `img2sixel` command with the correct parameters
+for displaying images in MCGA or CGA graphics modes.
+
+Display an image in 256 colors:
+
+   show my_image.png
+
+Take a picture with `/dev/video0` and then display it:
+
+   show --me
+
+Display an image in monochrome:
+
+   show --mono my_mono_image.png
+
+Display an image in monochrome if you have CGA graphics only:
+
+   show --mono --cga my_mono_image.png
+
+Display an image in a four-color CGA mode:
+
+   show --colors CyanMagenta my_image.png
+   show --colors LightCyanMagenta my_image.png
+   show --colors GreenRed my_image.png
+   show --colors LightGreenRed my_image.png
+
+Show the usage instructions:
+
+   show --help
 
 ## Compatibility
 
@@ -85,7 +127,9 @@ regardless of what machine you have.
 
 Unfortunately, I do not have access to other machines in order to test
 these changes.  Please feel free to create GitHub issues to let me
-know what doesn't work.
+know what doesn't work.  EGA graphics modes will not be supported
+unless someone with access to a computer with EGA graphics makes the
+changes.
 
 ## Setup
 
@@ -130,12 +174,12 @@ If you don't have an `~/.inputrc` file, you can create one with just
 these lines in it.  This will allow you to type Ctrl-Backspace, Delete,
 Ctrl-Delete, Page Up, and Page Down on the command line.
 
-If you are using Emacs, download [ansi.el].
+If you use [Emacs], download [ansi.el].
 
     curl -o ansi.src https://github.com/jhpyle/mTCP/blob/master/ansi.src
 
 Incorporate the contents of this file into your `.emacs` file.  This
-will ensure that Emacs will recognize the control sequences the the
+will ensure that [Emacs] will recognize the control sequences the the
 [TELNET.EXE] application will send.
 
 If you are using [Vim], add the following to your `.vimrc` file:
@@ -157,6 +201,71 @@ references `force_color_prompt`:
 
 If you would prefer a monochrome prompt, leave out
 `force_color_prompt=yes`.
+
+If your computer does not support MCGA modes, set the following in
+your `mtcp.cfg` file:
+
+    TELNET_CGA 1
+
+This is necessary for [Sixel graphics] to work appropriately.
+
+The [show] script can be installed by running `./install.sh` as root.
+The [install.sh] copies [show] to `/usr/local/bin` and installs color map
+PNG files in `/usr/local/share/sixel`.
+
+The [show] script depends on `libsixel-bin` and `streamer` (for the
+`--me`) option.
+
+    sudo apt-get install libsixel-bin streamer
+    git clone https://github.com/jhpyle/mTCP
+    cd mTCP
+    sudo ./install.sh
+    cd ..
+
+If you use [R], you might want to use this shorthand for showing a
+[ggplot2] image:
+
+    sx <- function(){
+      ggsave("graph.png", width=3.2, height=2.4)
+      system("show graph.png")
+    }
+
+Add a `.mailcap` file to your home directory that contains:
+
+    image/*; show %s
+
+This will signal to other applications that the [show] command should
+be used to display images.
+
+If you are using [Lynx], you can set `USE_MOUSE:TRUE` in your
+`/etc/lynx.cfg` file to enable mouse support.
+
+You can also view images using [Sixel graphics] while using [Lynx].
+You can press `*` to show links to images, or set
+`MAKE_LINKS_FOR_ALL_IMAGES:TRUE` in your `/etc/lynx.cfg` file to turn
+this feature on by default.  When you click on a link to an image,
+your `.mailcap` file will be consulted and the [show] command will be
+used to show the image.
+
+You can also view images while using [Links].  To set this up, go to
+the Setup menu (press Escape to open the menu bar) and go to
+Associations.  Then you can add file associations for images.  The
+first "Label" should be, e.g., "PNG," and the "Content-Type" should be
+`image/png`, and "Program" should be `show %`.  Unselect "Block
+terminal while program running" (this causes problems).  Make sure
+that "Run on terminal" is selected.  Unselect "Ask before opening."
+Don't select "Accepts HTTP URLs" or "Accepts FTP URLs."  Then save the
+Association and repeat the process for `image/jpeg` and `image/gif`.
+Then do "Save options" under "Setup."  This will create a file
+`~/.links2/links.cfg`.  The file will contain something like the
+following:
+
+    association "PNG" "image/png" "show %" 11 1
+    association "JPEG" "image/jpeg" "show %" 11 1
+    association "GIF" "image/gif" "show %" 11 1
+
+Image support is a little better in [Lynx] than it is on [Links]
+because it will show a link to an image that is itself a hyperlink.
 
 ## Compiling
 
@@ -185,20 +294,26 @@ the [MAKEFILE] by commenting out this line:
     compile_options += -i=$(tcp_h_dir) -i=$(common_h_dir)
 
 In its place, I used the `INCLUDE` environment variable to let the
-compiler know where the `.h` files are.
+compiler know where the `.h` files are.  I also had to abbreviate
+`TELNET.CFG` to `T.CFG` to squeeze some additional characters in.
 
 Then I was able to compile Telnet by running `wmake` from the
 `~/dos/MTCP/APPS/TELNET` directory.
 
-I created a batch file called MAKE.BAT to recompile the parts I was editing:
+I created a batch file called MAKE.BAT to recompile only the parts I was editing:
 
     del telnet.exe
     del telnet.obj
+    del telnetsc.obj
+    del telnetsx.obj
     del telnet.map
-    del mouse.obj
+    del misc.obj
     wmake telnet.exe
 
 This is much faster than waiting for a full `wmake` to complete.
+(It's probably possible to do this with the Makefile itself, but I
+forgot exactly how make works.)  For a final build you should run
+`wmake` and then `wmake patch`.
 
 [ansi.src]: https://github.com/jhpyle/mTCP/blob/master/ansi.src
 [MAKEFILE]: https://github.com/jhpyle/mTCP/blob/master/MTCP/APPS/TELNET/MAKEFILE
@@ -214,3 +329,10 @@ This is much faster than waiting for a full `wmake` to complete.
 [DosBox]: https://www.dosbox.com/
 [Vim]: https://www.vim.org/
 [Emacs]: https://www.gnu.org/software/emacs/
+[Sixel graphics]: https://en.wikipedia.org/wiki/Sixel
+[show]: https://github.com/jhpyle/mTCP/blob/master/sixel/show
+[install.sh]: https://github.com/jhpyle/mTCP/blob/master/install.sh
+[R]: https://www.r-project.org/
+[ggplot2]: https://ggplot2.tidyverse.org/
+[Links]: https://en.wikipedia.org/wiki/Links_(web_browser)
+[Lynx]: https://en.wikipedia.org/wiki/Lynx_(web_browser)

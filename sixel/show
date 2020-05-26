@@ -1,0 +1,167 @@
+#! /bin/bash
+
+usage="$(basename "$0") [options] FILE -- show a Sixel image
+
+Options:
+
+    --help        show this help text
+    --me          show a still image from /dev/video0 instead of FILE
+    --mono        use a monochrome image
+    --cga         indicate that only CGA graphics is available
+    --colors MAP  use the color map MAP; choices are GreenRed, LightGreenRed, 
+                  CyanMagenta, and LightCyanMagenta
+    --nostretch   do not stretch images (useful if displaying in a modern 
+                  terminal like mlterm)
+
+FILE is the image file you want to show (ignored if --me is used)."
+
+COLORMAPS=/usr/local/share/sixel
+DEFAULTCGACOLORMAP=lightcyanmagenta.png
+
+executable=$( which img2sixel )
+if [ ! -x "$executable" ] ; then
+    >&2 echo "Error: img2sixel could not be found.  Try: apt-get install libsixel-bin"
+    exit 1
+fi
+
+if [ ! -d "${COLORMAPS}" ]; then
+    >&2 echo "Error: the directory ${COLORMAPS} could not be found."
+    exit 1
+fi
+
+SPECIAL=none
+COLOR=mcga
+CGA=false
+STRETCH=true
+POSITIONAL=()
+
+while [[ $# -gt 0 ]]
+do
+key="$1"
+
+case $key in
+    --me)
+	SPECIAL="me"
+	shift
+	;;
+    --mono)
+	COLOR="mono"
+	shift
+	;;
+    --cga)
+	CGA="true"
+	shift
+	;;
+    --colors)
+	COLOR="$2"
+	CGA=true
+	shift
+	shift
+	;;
+    --nostretch)
+	STRETCH="false"
+	shift
+	;;
+    -h|--help)
+	echo "$usage"
+	exit
+	;;
+    *)
+	POSITIONAL+=("$1")
+	shift
+	;;
+esac
+done
+set -- "${POSITIONAL[@]}" # restore positional parameters
+
+if [ "$SPECIAL" == "me" ]; then
+    # Take 24 shots over 1 second in order to give the camera time to
+    # apply auto-exposure settings.
+    executable=$( which streamer )
+    if [ ! -x "$executable" ] ; then
+	>&2 echo "Error: streamer not found.  Try: apt-get install streamer"
+	exit 1
+    fi
+    if [ "${COLOR}" == "mono" ]; then
+	streamer -s 640x480 -t 24 -r 24 -o /tmp/me00.ppm &> /dev/null
+    else
+	streamer -s 320x240 -t 24 -r 24 -o /tmp/me00.ppm &> /dev/null
+    fi
+    IMAGEFILE=/tmp/me23.ppm
+else
+    if [ $# -eq 0 ]; then
+	>&2 echo "$usage"
+	exit 1
+    fi
+    IMAGEFILE="$1"
+    if [ ! -f "${IMAGEFILE}" ]; then
+	>&2 echo "Error: the file ${IMAGEFILE} could not be found"
+	exit 1
+    fi	
+fi
+
+parts=(`imgsize -r "$IMAGEFILE"`)
+
+if [ "$COLOR" == "mono" ] && [ "$CGA" == "false" ]; then
+    STRETCH=false
+fi
+
+w=${parts[0]}
+if [ "${STRETCH}" == "true" ]; then
+    if [ "$COLOR" == "mono" ]; then
+	h=$(( parts[1] * 200 / 480 ))
+    else
+	h=$(( parts[1] * 200 / 240 ))
+    fi
+else
+    h=${parts[1]}
+fi
+
+if [ "$COLOR" == "mono" ]; then
+    if (( $w > 640 )); then
+	h=$(( $h * 640 / $w ))
+	w=$(( $w * 640 / $w ))
+    fi
+
+    if [ "$CGA" == "true" ]; then
+	if (( $h > 200 )); then
+	    w=$(( $w * 200 / $h ))
+	    h=$(( $h * 200 / $h ))
+	fi
+    else
+	if (( $h > 480 )); then
+	    w=$(( $w * 480 / $h ))
+	    h=$(( $h * 480 / $h ))
+	fi
+    fi
+else
+    if (( $w > 320 )); then
+	h=$(( $h * 320 / $w ))
+	w=$(( $w * 320 / $w ))
+    fi
+
+    if (( $h > 200 )); then
+	w=$(( $w * 200 / $h ))
+	h=$(( $h * 200 / $h ))
+    fi
+fi
+
+if [ "$COLOR" == "mono" ]; then
+    img2sixel -e -w $w -h $h $IMAGEFILE
+elif [ "$COLOR" == "GreenRed" ]; then
+    img2sixel -w $w -h $h -m "${COLORMAPS}/greenred.png" $IMAGEFILE
+elif [ "$COLOR" == "LightGreenRed" ]; then
+    img2sixel -w $w -h $h -m "${COLORMAPS}/lightgreenred.png" $IMAGEFILE
+elif [ "$COLOR" == "CyanMagenta" ]; then
+    img2sixel -w $w -h $h -m "${COLORMAPS}/cyanmagenta.png" $IMAGEFILE
+elif [ "$COLOR" == "LightCyanMagenta" ]; then
+    img2sixel -w $w -h $h -m "${COLORMAPS}/lightcyanmagenta.png" $IMAGEFILE
+elif [ "$CGA" == "true" ]; then
+    img2sixel -w $w -h $h -m "${COLORMAPS}/${DEFAULTCGACOLORMAP}" $IMAGEFILE
+else
+    img2sixel -w $w -h $h -t rgb -p 255 $IMAGEFILE
+fi
+
+if [ "$SPECIAL" == "me" ]; then
+    rm -f /tmp/me??.ppm
+fi	

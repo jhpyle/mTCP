@@ -40,7 +40,7 @@
 
 #define MAX_SELECTION_SIZE 2000
 #define MAX_SELECTION_SIZE_PLUS 2048
-#define BASE64_BUFFER_SIZE 3000
+//#define BASE64_BUFFER_SIZE 3000
 
 #include <stdarg.h>
 
@@ -203,6 +203,12 @@ class Screen {
 
     bool originMode;
     bool autoWrap;
+    bool usingGraphics;
+    bool preventSnow;
+    bool colorCard;         // Monochrome=false, CGA, EGA, or VGA=true
+    bool padA;
+    bool padB;
+    bool padC;
 
     struct Selection {
       char far *buf;
@@ -224,8 +230,6 @@ class Screen {
 
     // Video card characteristics
 
-    bool     colorCard;         // Monochrome=false, CGA, EGA, or VGA=true
-    bool     preventSnow;       // Prevent CGA snow
     uint16_t screenBaseSeg;     // Segment for the screen framebuffer
     uint16_t bytesPerLine;      // How many bytes does a terminal line require?
 

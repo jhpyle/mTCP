@@ -53,6 +53,7 @@
    2020-05-10: Extended keyboard support.
    2020-05-17: Mouse support.
    2020-05-18: Fixed bug with Unicode characters at end of buffer.
+   2020-05-25: Added Sixel graphics support
 
    Todo:
 
@@ -90,6 +91,7 @@
 #include "telnetsc.h"
 #include "keys.h"
 #include "mouse.h"
+#include "telnetsx.h"
 
 #ifdef FILEXFER
 #include "ymodem.h"
@@ -135,7 +137,7 @@ uint8_t BackScrollPages = 4;
 uint32_t ConnectTimeout = TELNET_CONNECT_TIMEOUT; // How many ms to wait for a connection
 
 char TermType[TERMTYPE_MAXLEN] = "ANSI";
-char *incomingClipboard = (char *)malloc(BASE64_BUFFER_SIZE);
+//char *incomingClipboard = (char *)malloc(BASE64_BUFFER_SIZE);
 
 static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len );
 
@@ -166,81 +168,81 @@ static void     send( uint8_t *userBuf, uint16_t userBufLen );
 char utf_chars[3];
 uint8_t utf_chars_seen;
 
-char base64_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+// char base64_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-static inline bool is_base64(char c) {
-  return (isalnum(c) || (c == '+') || (c == '/'));
-}
+// static inline bool is_base64(char c) {
+//   return (isalnum(c) || (c == '+') || (c == '/'));
+// }
 
-static void base64_decode(char *encoded_string, char *ret, int maxlen) {
-  int in_len = strlen(encoded_string);
-  int i = 0;
-  int j = 0;
-  int k = 0;
-  int in_ = 0;
-  int l;
-  char char_array_4[4], char_array_3[3];
-  maxlen--; // leave room for string terminator
+// static void base64_decode(char *encoded_string, char *ret, int maxlen) {
+//   int in_len = strlen(encoded_string);
+//   int i = 0;
+//   int j = 0;
+//   int k = 0;
+//   int in_ = 0;
+//   int l;
+//   char char_array_4[4], char_array_3[3];
+//   maxlen--; // leave room for string terminator
 
-  while ( in_len-- && ( encoded_string[in_] != '=') && is_base64(encoded_string[in_]) ) {
-    char_array_4[i++] = encoded_string[in_];
-    in_++;
-    if (i == 4) {
-      for (i = 0; i < 4; i++){
-        bool found = false;
-        for (l = 0; l < 64; ++l){
-          if ( char_array_4[i] == base64_chars[l] ){
-            char_array_4[i] = l;
-            found = true;
-            break;
-          }
-        }
-        if (!found){
-          char_array_4[i] = 255;
-        }
-      }
-      char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
-      char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
-      char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
+//   while ( in_len-- && ( encoded_string[in_] != '=') && is_base64(encoded_string[in_]) ) {
+//     char_array_4[i++] = encoded_string[in_];
+//     in_++;
+//     if (i == 4) {
+//       for (i = 0; i < 4; i++) {
+//         bool found = false;
+//         for (l = 0; l < 64; ++l) {
+//           if ( char_array_4[i] == base64_chars[l] ) {
+//             char_array_4[i] = l;
+//             found = true;
+//             break;
+//           }
+//         }
+//         if (!found) {
+//           char_array_4[i] = 255;
+//         }
+//       }
+//       char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
+//       char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
+//       char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
 
-      for (i = 0; (i < 3); i++){
-        if (k < maxlen){
-          ret[k++] = char_array_3[i];
-        }
-      }
-      i = 0;
-    }
-  }
+//       for (i = 0; (i < 3); i++) {
+//         if (k < maxlen) {
+//           ret[k++] = char_array_3[i];
+//         }
+//       }
+//       i = 0;
+//     }
+//   }
 
-  if (i) {
-    for (j = i; j < 4; j++){
-      char_array_4[j] = 0;
-    }
-    for (j = 0; j < 4; j++){
-      bool found = false;
-      for (l = 0; l < 64; ++l){
-        if ( char_array_4[j] == base64_chars[l] ){
-          char_array_4[j] = l;
-          found = true;
-          break;
-        }
-      }
-      if (!found){
-        char_array_4[j] = 255;
-      }
-    }
-    char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
-    char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
-    char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
+//   if (i) {
+//     for (j = i; j < 4; j++) {
+//       char_array_4[j] = 0;
+//     }
+//     for (j = 0; j < 4; j++) {
+//       bool found = false;
+//       for (l = 0; l < 64; ++l) {
+//         if ( char_array_4[j] == base64_chars[l] ) {
+//           char_array_4[j] = l;
+//           found = true;
+//           break;
+//         }
+//       }
+//       if (!found) {
+//         char_array_4[j] = 255;
+//       }
+//     }
+//     char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
+//     char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
+//     char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
 
-    for (j = 0; (j < i - 1); j++){
-      if (k < maxlen){
-        ret[k++] = char_array_3[j];
-      }
-    }
-  }
-  ret[k++] = 0;
-}
+//     for (j = 0; (j < i - 1); j++) {
+//       if (k < maxlen) {
+//         ret[k++] = char_array_3[j];
+//       }
+//     }
+//   }
+//   ret[k++] = 0;
+// }
 
 // Ctrl-Break and Ctrl-C handlers.
 
@@ -287,8 +289,9 @@ TelnetOpts MyTelnetOpts;
 // Screen handling and emulation
 
 Screen s;
+Graphics g;
 
-enum StreamStates { Normal = 0, ESC_SEEN, CSI_SEEN, OSC_SEEN, IAC_SEEN, UTF2_SEEN, UTF3_SEEN };
+enum StreamStates { Normal = 0, ESC_SEEN, CSI_SEEN, OSC_SEEN, DCS_SEEN, IAC_SEEN, UTF2_SEEN, UTF3_SEEN };
 StreamStates StreamState;
 
 
@@ -423,11 +426,11 @@ uint32_t currentTimeIsGood;
 uint32_t lastMouseTime = 0;
 
 void mouse_init( void ) {
-  if (ibm_mouse_init() == -1){
+  if (ibm_mouse_init() == -1) {
     //printf( "\r\nUsing mouse\r\n" );
     mouse.enable = true;
   }
-  else{
+  else {
     //printf( "\r\nNot using mouse\r\n" );
     mouse.enable = false;
   }
@@ -451,7 +454,7 @@ void mouse_init( void ) {
 }
 
 void mouse_install( void ) {
-  if (mouse.enable && !mouse.installed){
+  if (mouse.enable && !mouse.installed) {
     ibm_mouse_install();
     mouse_changed = 0;
     mouse.installed = true;
@@ -459,7 +462,7 @@ void mouse_install( void ) {
 }
 
 void mouse_uninstall( void ) {
-  if (mouse.enable && mouse.installed){
+  if (mouse.enable && mouse.installed) {
     ibm_mouse_uninstall();
     mouse_changed = 0;
     mouse.installed = false;
@@ -467,34 +470,34 @@ void mouse_uninstall( void ) {
 }
 
 void mouse_show( void ) {
-  if (mouse.enable && !(mouse.showing)){
+  if (mouse.installed && !(mouse.showing)) {
     ibm_mouse_show();
     mouse.showing = true;
   }
 }
 
 void mouse_hide( void ) {
-  if (mouse.enable && mouse.showing){
+  if (mouse.installed && mouse.showing) {
     ibm_mouse_hide();
     mouse.showing = false;
   }
 }
 
-void mouse_get_status( void ) {
-  if (mouse.enable){
-    ibm_mouse_get_status(&(mouse.buttons), &(mouse.column), &(mouse.row));
-    mouse.column = mouse.column >> 3;
-    mouse.row = mouse.row >> 3;
-  }
-}
+// void mouse_get_status( void ) {
+//   if (mouse.enable) {
+//     ibm_mouse_get_status(&(mouse.buttons), &(mouse.column), &(mouse.row));
+//     mouse.column = mouse.column >> 3;
+//     mouse.row = mouse.row >> 3;
+//   }
+// }
 
 uint8_t prevRow = 255;
 uint8_t prevCol = 255;
 uint8_t downRow = 255;
 uint8_t downCol = 255;
 
-void send_move(){
-  if ( mouse.buttons == 0 || ( mouse.row == prevRow && mouse.column == prevCol ) ){
+void send_move() {
+  if ( mouse.buttons == 0 || ( mouse.row == prevRow && mouse.column == prevCol ) ) {
     prevRow = mouse.row;
     prevCol = mouse.column;
     return;
@@ -502,8 +505,8 @@ void send_move(){
   if ( mySocket->outgoingQueueIsFull( ) ) return;
   prevRow = mouse.row;
   prevCol = mouse.column;
-  if ( !mouse.xterm_motion ){
-    if ( mouse.buttons & 3 ){
+  if ( !mouse.xterm_motion ) {
+    if ( mouse.buttons & 3 ) {
       mouse_hide();
       s.extendSelectionRelative(mouse.row - 1, mouse.column - 1, downRow - 1, downCol - 1);
       s.updateHighlight();
@@ -511,26 +514,26 @@ void send_move(){
     }
     return;
   }
-  if ( mouse.xterm_sgr ){
+  if ( mouse.xterm_sgr ) {
     uint8_t buttonVal = 32;
     DataBuf *buf = (DataBuf *)TcpBuffer::getXmitBuf( );
     uint8_t i = 0;
     buf->data[i++] = 0x1b;
     buf->data[i++] = '[';
     buf->data[i++] = '<';
-    if ( mouse.buttons & 1 ){
+    if ( mouse.buttons & 1 ) {
       buttonVal += 0;
     }
-    else if ( mouse.buttons & 2 ){
+    else if ( mouse.buttons & 2 ) {
       buttonVal += 2;
     }
-    else if ( mouse.buttons & 4 ){
+    else if ( mouse.buttons & 4 ) {
       buttonVal += 1;
     }
     char Cb[3];
     int Cbn = sprintf(Cb, "%d", buttonVal);
     uint8_t j;
-    for (j = 0; j < Cbn; j++){
+    for (j = 0; j < Cbn; j++) {
       buf->data[i++] = Cb[j];
     }
     buf->data[i++] = ';';
@@ -538,11 +541,11 @@ void send_move(){
     char Py[3];
     int Pxn = sprintf(Px, "%d", mouse.row);
     int Pyn = sprintf(Py, "%d", mouse.column);
-    for (j = 0; j < Pxn; j++){
+    for (j = 0; j < Pxn; j++) {
       buf->data[i++] = Px[j];
     }
     buf->data[i++] = ';';
-    for (j = 0; j < Pyn; j++){
+    for (j = 0; j < Pyn; j++) {
       buf->data[i++] = Py[j];
     }
     buf->data[i++] = 'M';
@@ -555,10 +558,10 @@ void send_move(){
     DataBuf *buf = (DataBuf *)TcpBuffer::getXmitBuf( );
     uint8_t i = 0;
     uint8_t Cb;
-    if ( mouse.buttons & 4 ){
+    if ( mouse.buttons & 4 ) {
       Cb = 65;
     }
-    if ( mouse.buttons & 2 ){
+    if ( mouse.buttons & 2 ) {
       Cb = 66;
     }
     else {
@@ -577,11 +580,11 @@ void send_move(){
   }
 }
 
-void send_selection(){
+void send_selection() {
   DataBuf *buf = (DataBuf *)TcpBuffer::getXmitBuf( );
   int selection_length = strlen(s.selection.buf);
   int i = 0;
-  if (mouse.bracketed_paste){
+  if (mouse.bracketed_paste) {
     buf->data[i++] = 0x1b;
     buf->data[i++] = '[';
     buf->data[i++] = '2';
@@ -589,10 +592,10 @@ void send_selection(){
     buf->data[i++] = '0';
     buf->data[i++] = '~';
   }
-  for (int j = 0; j < selection_length; ++j){
+  for (int j = 0; j < selection_length; ++j) {
     buf->data[i++] = s.selection.buf[j];
   }
-  if (mouse.bracketed_paste){
+  if (mouse.bracketed_paste) {
     buf->data[i++] = 0x1b;
     buf->data[i++] = '[';
     buf->data[i++] = '2';
@@ -606,11 +609,11 @@ void send_selection(){
   }
 }
 
-void send_click( uint8_t direction, uint8_t buttonVal ){
+void send_click( uint8_t direction, uint8_t buttonVal ) {
   if ( mySocket->outgoingQueueIsFull( ) ) return;
-  if ( mouse.xterm_sgr ){
-    // if (buttonVal == XTERM_BUTTON_MIDDLE){
-    //   if (direction == MOUSE_UP){
+  if ( mouse.xterm_sgr ) {
+    // if (buttonVal == XTERM_BUTTON_MIDDLE) {
+    //   if (direction == MOUSE_UP) {
     //         send_selection();
     //   }
     // }
@@ -625,7 +628,7 @@ void send_click( uint8_t direction, uint8_t buttonVal ){
     char Cb[3];
     int Cbn = sprintf(Cb, "%d", buttonVal);
     uint8_t j;
-    for (j = 0; j < Cbn; j++){
+    for (j = 0; j < Cbn; j++) {
       buf->data[i++] = Cb[j];
     }
     buf->data[i++] = ';';
@@ -633,14 +636,14 @@ void send_click( uint8_t direction, uint8_t buttonVal ){
     char Py[3];
     int Pxn = sprintf(Px, "%d", mouse.row);
     int Pyn = sprintf(Py, "%d", mouse.column);
-    for (j = 0; j < Pxn; j++){
+    for (j = 0; j < Pxn; j++) {
       buf->data[i++] = Px[j];
     }
     buf->data[i++] = ';';
-    for (j = 0; j < Pyn; j++){
+    for (j = 0; j < Pyn; j++) {
       buf->data[i++] = Py[j];
     }
-    if ( direction == MOUSE_DOWN ){
+    if ( direction == MOUSE_DOWN ) {
       buf->data[i++] = 'M';
     }
     else {
@@ -653,8 +656,8 @@ void send_click( uint8_t direction, uint8_t buttonVal ){
     // }
   }
   else if ( mouse.xterm_normal ) {
-    // if (buttonVal == XTERM_BUTTON_MIDDLE){
-    //   if (direction == MOUSE_UP){
+    // if (buttonVal == XTERM_BUTTON_MIDDLE) {
+    //   if (direction == MOUSE_UP) {
     //         send_selection();
     //   }
     // }
@@ -662,10 +665,10 @@ void send_click( uint8_t direction, uint8_t buttonVal ){
     DataBuf *buf = (DataBuf *)TcpBuffer::getXmitBuf( );
     uint8_t i = 0;
     uint8_t Cb;
-    if ( direction == MOUSE_DOWN ){
+    if ( direction == MOUSE_DOWN ) {
       Cb = 32 + buttonVal;
     }
-    else{
+    else {
       Cb = '#';
     }
     buf->b.dataLen = 6;
@@ -680,14 +683,14 @@ void send_click( uint8_t direction, uint8_t buttonVal ){
     }
     // }
   }
-  else{
-    if ( direction == XTERM_BUTTON_DOWN && buttonVal == XTERM_BUTTON_LEFT ){
+  else {
+    if ( direction == XTERM_BUTTON_DOWN && buttonVal == XTERM_BUTTON_LEFT ) {
       downRow = mouse.row;
       downCol = mouse.column;
-      if (!currentTimeIsGood){
+      if (!currentTimeIsGood) {
         ibm_mouse_get_time(&currentTime);
       }
-      if ( currentTime - prevPrevLeftDown < 12){ // triple click
+      if ( currentTime - prevPrevLeftDown < 13) { // triple click
         mouse_hide();
         s.highlightSelection(false);
         s.readLine(mouse.column - 1);
@@ -696,7 +699,7 @@ void send_click( uint8_t direction, uint8_t buttonVal ){
         prevPrevLeftDown = 0;
         prevLeftDown = 0;
       }
-      else if ( currentTime - prevLeftDown < 9){ // double click
+      else if ( currentTime - prevLeftDown < 10) { // double click
         mouse_hide();
         s.highlightSelection(false);
         s.readWord(mouse.row - 1, mouse.column - 1);
@@ -705,7 +708,7 @@ void send_click( uint8_t direction, uint8_t buttonVal ){
         prevPrevLeftDown = prevLeftDown;
         prevLeftDown = currentTime;
       }
-      else{
+      else {
         mouse_hide();
         s.highlightSelection(false);
         s.setSelectionStart(mouse.row - 1, mouse.column - 1);
@@ -714,26 +717,25 @@ void send_click( uint8_t direction, uint8_t buttonVal ){
         prevLeftDown = currentTime;
       }
     }
-    if ( direction == XTERM_BUTTON_DOWN && buttonVal == XTERM_BUTTON_RIGHT ){
+    if ( direction == XTERM_BUTTON_DOWN && buttonVal == XTERM_BUTTON_RIGHT ) {
       mouse_hide();
       s.highlightSelection(false);
       s.extendSelection(mouse.row - 1, mouse.column - 1);
       s.highlightSelection(true);
       mouse_show();
     }
-    if ( direction == XTERM_BUTTON_UP && ( buttonVal == XTERM_BUTTON_RIGHT || buttonVal == XTERM_BUTTON_LEFT ) ){
-      if ( s.selection.start != s.selection.end ){
+    if ( direction == XTERM_BUTTON_UP && ( buttonVal == XTERM_BUTTON_RIGHT || buttonVal == XTERM_BUTTON_LEFT ) ) {
+      if ( s.selection.start != s.selection.end ) {
         s.populateSelection();
       }
     }
-    if ( direction == XTERM_BUTTON_UP && buttonVal == XTERM_BUTTON_MIDDLE ){
+    if ( direction == XTERM_BUTTON_UP && buttonVal == XTERM_BUTTON_MIDDLE ) {
       send_selection();
     }
   }
 }
 
 int main( int argc, char *argv[] ) {
-
   printf( "%s  %s", CopyrightMsg1, CopyrightMsg2 );
 
   parseArgs( argc, argv );
@@ -744,9 +746,8 @@ int main( int argc, char *argv[] ) {
     exit(-1);
   }
 
+  g.useMcga = true;
   getCfgOpts( );
-
-
   if ( Utils::initStack( 1, TCP_SOCKET_RING_SIZE, ctrlBreakHandler, ctrlCHandler ) ) {
     printf( "\nFailed to initialize TCP/IP - exiting\n" );
     exit(-1);
@@ -758,6 +759,7 @@ int main( int argc, char *argv[] ) {
   mouse_init();
   mouse_install();
   s.initializeSelection();
+  g.initializeGraphics();
 
   // Allocate memory for a receive buffer.  This is in addition to the normal
   // socket receive buffer.  Do this early so that we don't get too far into
@@ -768,6 +770,9 @@ int main( int argc, char *argv[] ) {
   if ( (recvBuffer == NULL) || s.init( BackScrollPages, InitWrapMode ) ) {
     puts( "\nNot enough memory - exiting\n" );
     shutdown( -1 );
+  }
+  if ( !g.useMcga ){
+    s.preventSnow = true;
   }
 
   #ifdef FILEXFER
@@ -955,30 +960,30 @@ int main( int argc, char *argv[] ) {
     #endif
 
     if ( s.isVirtualScreenUpdated( ) && UserInputMode == UserInputMode_t::Telnet ) {
-      if ( mouse.xterm_any && mouse.showing ){
+      if ( mouse.xterm_any && mouse.showing ) {
         mouse_hide();
       }
       s.paint( );
       s.updateVidBufPtr( );
-      if ( mouse.xterm_any && mouse.should_show ){
+      if ( mouse.xterm_any && mouse.should_show ) {
         mouse_show();
       }
     }
 
     if ( UserInputMode == UserInputMode_t::Telnet ) { gotoxy( s.cursor_x, s.cursor_y ); }
 
-    if ( needToSendSelection ){
+    if ( needToSendSelection ) {
       send_selection();
       needToSendSelection = false;
     }
 
-    if ( mouse.pending > 0 ){
+    if ( mouse.pending > 0 ) {
       ibm_mouse_get_time(&currentTime);
       currentTimeIsGood = true;
       ticks = currentTime - mouse.prev_down;
-      if ( mouse.pending & MOUSE_LEFT ){
-        //if ( ticks >= MOUSE_TICKS_DOUBLE_CLICK ){
-        if ( ticks >= MOUSE_TICKS_MIDDLE_CLICK ){
+      if ( mouse.pending & MOUSE_LEFT ) {
+        //if ( ticks >= MOUSE_TICKS_DOUBLE_CLICK ) {
+        if ( ticks >= MOUSE_TICKS_MIDDLE_CLICK ) {
           //printf("L DOWN DELAYED\r\n");
           send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_LEFT);
           mouse.buttons |= 1;
@@ -986,8 +991,8 @@ int main( int argc, char *argv[] ) {
           mouse.prev_down = 0;
         }
       }
-      if ( mouse.pending & MOUSE_RIGHT ){
-        if ( ticks >= MOUSE_TICKS_MIDDLE_CLICK ){
+      if ( mouse.pending & MOUSE_RIGHT ) {
+        if ( ticks >= MOUSE_TICKS_MIDDLE_CLICK ) {
           //printf("R DOWN DELAYED\r\n");
           send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_RIGHT);
           mouse.buttons |= 2;
@@ -995,8 +1000,8 @@ int main( int argc, char *argv[] ) {
           mouse.prev_down = 0;
         }
       }
-      // if ( mouse.pending & MOUSE_DOUBLE_START ){
-      //         if ( ticks >= MOUSE_TICKS_DOUBLE_CLICK ){
+      // if ( mouse.pending & MOUSE_DOUBLE_START ) {
+      //         if ( ticks >= MOUSE_TICKS_DOUBLE_CLICK ) {
       //           //printf("L UP DELAYED\r\n");
       //           send_click(XTERM_BUTTON_UP, XTERM_BUTTON_LEFT);
       //     mouse.buttons &= ~1;
@@ -1005,42 +1010,42 @@ int main( int argc, char *argv[] ) {
       //         }
       // }
     }
-    else{
+    else {
       currentTimeIsGood = false;
     }
 
     //gets itself into a state where double click testing is not done; it does L DOWN DELAYED immediately
     //after left mouse button goes down
-    if ( mouse_changed ){
+    if ( mouse_changed && mouse.installed ) {
       mouse_changed = 0;
-      if ( !mouse.should_show ){
+      if ( !mouse.should_show ) {
         mouse.should_show = true;
         mouse_show();
       }
-      if (currentTimeIsGood){
+      if (currentTimeIsGood) {
         lastMouseTime = currentTime;
       }
-      else{
+      else {
         ibm_mouse_get_time(&lastMouseTime);
       }
       send_move();
-      if ( buffer_start == buffer_end ){
+      if ( buffer_start == buffer_end ) {
       }
-      else{
-        while (1){
-          if (buffer_start == 0){
+      else {
+        while (1) {
+          if (buffer_start == 0) {
             buffer_prev = 15;
           }
           else {
             buffer_prev = buffer_start - 1;
           }
-          if (mouse.pending && (buffer_row[buffer_start] != buffer_row[buffer_prev] || buffer_col[buffer_start] != buffer_col[buffer_prev]) && buffer_row[buffer_prev] != 255){
-            if ( mouse.pending & 1 ){
+          if (mouse.pending && (buffer_row[buffer_start] != buffer_row[buffer_prev] || buffer_col[buffer_start] != buffer_col[buffer_prev]) && buffer_row[buffer_prev] != 255) {
+            if ( mouse.pending & 1 ) {
               send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_LEFT);
               mouse.buttons |= 1;
               mouse.pending &= ~1;
             }
-            if ( mouse.pending & 2 ){
+            if ( mouse.pending & 2 ) {
               send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_RIGHT);
               mouse.buttons |= 2;
               mouse.pending &= ~2;
@@ -1051,16 +1056,16 @@ int main( int argc, char *argv[] ) {
           mouse.column = buffer_col[buffer_start] + 1;
           button_change = buffer_buttons[buffer_start] ^ buffer_buttons[buffer_prev];
 
-          if ( button_change > 0 ){
+          if ( button_change > 0 ) {
             buttons_down = buffer_buttons[buffer_start] & button_change;
             buttons_up = (~buffer_buttons[buffer_start]) & button_change;
-            if ( buttons_down & 3 ){ // left and/or right down
+            if ( buttons_down & 3 ) { // left and/or right down
               currentTime = (buffer_time_cx[buffer_start] << 16) + buffer_time_dx[buffer_start];
               ticks = currentTime - mouse.prev_down;
 
-              // if ( ticks < MOUSE_TICKS_DOUBLE_CLICK && ( buttons_down & 1 ) && ( mouse.prev_buttons & 1 )){
+              // if ( ticks < MOUSE_TICKS_DOUBLE_CLICK && ( buttons_down & 1 ) && ( mouse.prev_buttons & 1 )) {
               //         // double click
-              //   if ( mouse.pending & MOUSE_DOUBLE_START ){
+              //   if ( mouse.pending & MOUSE_DOUBLE_START ) {
               //           mouse.pending &= ~MOUSE_DOUBLE_START;
               //         }
               //         //printf("DC down\r\n");
@@ -1069,7 +1074,7 @@ int main( int argc, char *argv[] ) {
               //         mouse.prev_down = 0;
               //         mouse.pending &= ~1;
               // }
-              if ( ( ( buttons_down & 3 ) == 3 ) || ( ticks < MOUSE_TICKS_MIDDLE_CLICK && (( buttons_down ^ mouse.prev_buttons ) & 3 ) == 3 ) ){
+              if ( ( ( buttons_down & 3 ) == 3 ) || ( ticks < MOUSE_TICKS_MIDDLE_CLICK && (( buttons_down ^ mouse.prev_buttons ) & 3 ) == 3 ) ) {
                 // middle click
                 // send middle down
                 //printf("M DOWN\r\n");
@@ -1081,33 +1086,33 @@ int main( int argc, char *argv[] ) {
                 mouse.prev_down = 0;
                 mouse.pending &= ~3;
               }
-              else{
+              else {
                 mouse.pending |= (buttons_down & 3);
                 mouse.prev_down = currentTime;
               }
               mouse.prev_buttons = buttons_down;
             }
-            if ( buttons_down & MOUSE_MIDDLE ){
+            if ( buttons_down & MOUSE_MIDDLE ) {
               //printf("M DOWN NATURAL\r\n");
               send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_MIDDLE);
               mouse.buttons |= 4;
             }
-            if ( (buttons_up & 3) == 3 ){
+            if ( (buttons_up & 3) == 3 ) {
               //printf("M UP\r\n");
-              if ( mouse.pending & 1 ){
+              if ( mouse.pending & 1 ) {
                 send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_LEFT);
                 mouse.buttons |= 1;
                 mouse.pending &= ~1;
               }
-              if ( mouse.pending & 2 ){
+              if ( mouse.pending & 2 ) {
                 send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_RIGHT);
                 mouse.buttons |= 2;
                 mouse.pending &= ~2;
               }
-              if ( mouse.buttons & 4 ){
+              if ( mouse.buttons & 4 ) {
                 send_click(XTERM_BUTTON_UP, XTERM_BUTTON_MIDDLE);
               }
-              else{
+              else {
                 send_click(XTERM_BUTTON_UP, XTERM_BUTTON_LEFT);
                 send_click(XTERM_BUTTON_UP, XTERM_BUTTON_RIGHT);
               }
@@ -1115,60 +1120,60 @@ int main( int argc, char *argv[] ) {
               mouse.next_up_is_middle_up = false;
             }
             else {
-              if ( buttons_up & MOUSE_LEFT ){
+              if ( buttons_up & MOUSE_LEFT ) {
                 // currentTime = (buffer_time_cx[buffer_start] << 16) + buffer_time_dx[buffer_start];
                 // ticks = currentTime - mouse.prev_down;
-                // if ( ticks < 9){
+                // if ( ticks < 9) {
                 //   mouse.pending |= MOUSE_DOUBLE_START;
                 // }
-                // else{
-                if ( mouse.pending & 1 ){
+                // else {
+                if ( mouse.pending & 1 ) {
                   //printf("L DOWN (ACCEL)\r\n");
                   send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_LEFT);
                   mouse.buttons |= 1;
                   mouse.pending &= ~1;
                 }
-                if (mouse.ignore_next_left_up){
+                if (mouse.ignore_next_left_up) {
                   mouse.ignore_next_left_up = false;
                 }
-                else if (mouse.next_up_is_middle_up){
+                else if (mouse.next_up_is_middle_up) {
                   //printf("M UP\r\n");
                   send_click(XTERM_BUTTON_UP, XTERM_BUTTON_MIDDLE);
                   mouse.buttons &= ~4;
                   mouse.next_up_is_middle_up = false;
                   mouse.ignore_next_right_up = true;
                 }
-                else{
+                else {
                   //printf("L UP\r\n");
                   send_click(XTERM_BUTTON_UP, XTERM_BUTTON_LEFT);
                   mouse.buttons &= ~1;
                 }
               }
-              if ( buttons_up & MOUSE_RIGHT ){
-                if ( mouse.pending & 2 ){
+              if ( buttons_up & MOUSE_RIGHT ) {
+                if ( mouse.pending & 2 ) {
                   //printf("R DOWN (ACCEL)\r\n");
                   send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_RIGHT);
                   mouse.buttons |= 2;
                   mouse.pending &= ~2;
                 }
-                if (mouse.ignore_next_right_up){
+                if (mouse.ignore_next_right_up) {
                   mouse.ignore_next_right_up = false;
                 }
-                else if (mouse.next_up_is_middle_up){
+                else if (mouse.next_up_is_middle_up) {
                   //printf("M UP\r\n");
                   send_click(XTERM_BUTTON_UP, XTERM_BUTTON_MIDDLE);
                   mouse.buttons &= ~4;
                   mouse.next_up_is_middle_up = false;
                   mouse.ignore_next_left_up = true;
                 }
-                else{
+                else {
                   //printf("R UP\r\n");
                   send_click(XTERM_BUTTON_UP, XTERM_BUTTON_RIGHT);
                   mouse.buttons &= ~2;
                 }
               }
             }
-            if ( buttons_up & MOUSE_MIDDLE ){
+            if ( buttons_up & MOUSE_MIDDLE ) {
               //printf("M UP NATURAL\r\n");
               send_click(XTERM_BUTTON_UP, XTERM_BUTTON_MIDDLE);
               mouse.buttons &= ~4;
@@ -1176,17 +1181,17 @@ int main( int argc, char *argv[] ) {
           }
 
           buffer_start = (buffer_start + 1) & 0x0f;
-          if (buffer_start == buffer_end){
+          if (buffer_start == buffer_end) {
             break;
           }
         }
       }
     }
-    else{
-      if (!currentTimeIsGood){
+    else {
+      if (!currentTimeIsGood) {
         ibm_mouse_get_time(&currentTime);
       }
-      if ( ( currentTime - lastMouseTime ) > MOUSE_TICKS_SHOW_DURATION ){
+      if ( ( currentTime - lastMouseTime ) > MOUSE_TICKS_SHOW_DURATION ) {
         mouse.should_show = false;
         mouse_hide();
       }
@@ -1195,63 +1200,82 @@ int main( int argc, char *argv[] ) {
     // If a keystroke is waiting process it
 
     if ( bioskey(K_KEY_CHECK) ) {
+      Key_t key = getKey( );
 
-      Key_t key=getKey( );
-
-      if ( key.specialKey != K_NoKey ) {
-
-        switch ( UserInputMode ) {
-
-          case UserInputMode_t::Telnet:
-            if ( key.local ) {
-              // Returns 1 if the user wants to quit.
-              if ( processUserInput_TelnetLocal( key ) ) {
-                if ( done == 0 ) done = 1; else done = 3;
-              }
-            } else {
-              processUserInput_TelnetNonLocal( key );
-            }
-            break;
-
-          case UserInputMode_t::Help:
-            UserInputMode = UserInputMode_t::Telnet;
-            s.paint( );
-            s.updateVidBufPtr( );
-            break;
-
-          #ifdef FILEXFER
-
-          case UserInputMode_t::ProtocolSelect_Download:
-          case UserInputMode_t::ProtocolSelect_Upload:
-            processUserInput_FileProtocol( key );
-            break;
-
-          case UserInputMode_t::FilenameSelect_Download:
-          case UserInputMode_t::FilenameSelect_Upload:
-            processUserInput_Filename( key );
-            break;
-
-          case UserInputMode_t::ClobberDialog:
-          case UserInputMode_t::ClobberDialogDownloading:
-            processUserInput_ClobberDialog( key );
-            break;
-
-          case UserInputMode_t::TransferInProgress:
-            processUserInput_Transferring( key );
-            break;
-
-          #endif
-
-        } // end switch
-
+      if ( s.usingGraphics ){
+        g.returnToTextMode();
+        mouse_install();
+        s.usingGraphics = false;
+        s.paint();
       }
+      else {
+        if ( key.specialKey != K_NoKey ) {
 
+          switch ( UserInputMode ) {
+
+            case UserInputMode_t::Telnet:
+              if ( key.local ) {
+                // Returns 1 if the user wants to quit.
+                if ( processUserInput_TelnetLocal( key ) ) {
+                  if ( done == 0 ) done = 1; else done = 3;
+                }
+              } else {
+                processUserInput_TelnetNonLocal( key );
+              }
+              break;
+
+            case UserInputMode_t::Help:
+              UserInputMode = UserInputMode_t::Telnet;
+              s.paint( );
+              s.updateVidBufPtr( );
+              break;
+
+            #ifdef FILEXFER
+
+            case UserInputMode_t::ProtocolSelect_Download:
+            case UserInputMode_t::ProtocolSelect_Upload:
+              processUserInput_FileProtocol( key );
+              break;
+
+            case UserInputMode_t::FilenameSelect_Download:
+            case UserInputMode_t::FilenameSelect_Upload:
+              processUserInput_Filename( key );
+              break;
+
+            case UserInputMode_t::ClobberDialog:
+            case UserInputMode_t::ClobberDialogDownloading:
+              processUserInput_ClobberDialog( key );
+              break;
+
+            case UserInputMode_t::TransferInProgress:
+              processUserInput_Transferring( key );
+              break;
+
+            #endif
+
+          } // end switch
+        }
+      }
     } // end if keyboard pressed
 
 
     // The other side closed or the user requested an exit.  We want to do a
     // controlled close of the socket while processing any remaining incoming
     // data.  But there has to be a reasonable timeout period.
+
+    if ( g.sixelReady ) {
+      if ( g.sixelInvalid == 0 ){
+        s.usingGraphics = true;
+        mouse_hide();
+        mouse_uninstall();
+        g.showImage();
+      }
+      else {
+        sprintf( tmpBuf, "\r\nSixel error: %d c%d %dx%d\r\n", g.sixelInvalid, g.sixelColors, g.sixelPh, g.sixelPv );
+        s.add(tmpBuf);
+      }
+      g.sixelReady = false;
+    }
 
     if ( done ) {
       if ( done == 1 ) {
@@ -1264,7 +1288,6 @@ int main( int argc, char *argv[] ) {
         }
       }
     }
-
   }
 
   mouse_hide();
@@ -1446,7 +1469,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
       }
       if ( key.normalKey == 0x20 ) {
         uint16_t flags = bioskey(K_KEY_FLAGS);
-        if ( flags & 0x04 ){
+        if ( flags & 0x04 ) {
           buf->b.dataLen = 1;
           buf->data[0] = 0x00;
           break;
@@ -1521,7 +1544,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Insert: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
         break;
@@ -1533,7 +1556,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Home: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'H';
         break;
@@ -1545,7 +1568,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_End: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'F';
         break;
@@ -1557,7 +1580,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_CursorUp: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'A';
         break;
@@ -1569,7 +1592,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_CursorDown: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'B';
         break;
@@ -1581,7 +1604,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_CursorLeft: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'D';
         break;
@@ -1593,7 +1616,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_CursorRight: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'C';
         break;
@@ -1605,7 +1628,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_PageDown: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '6'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
         break;
@@ -1617,7 +1640,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_PageUp: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '5'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
         break;
@@ -1635,7 +1658,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
       // character now, which is the correct safe choice.  (Previously
       // it was a dead key, so this is a slight improvement.
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
         break;
@@ -1651,7 +1674,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_Insert: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
         break;
@@ -1664,7 +1687,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_Home: {
       s.add( "" );
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'H';
         break;
@@ -1677,7 +1700,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Ctrl_End: {
       s.add( "" );
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'F';
         break;
@@ -1689,7 +1712,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_CursorUp: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'A';
         break;
@@ -1701,7 +1724,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_CursorDown: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'B';
         break;
@@ -1713,7 +1736,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_CursorLeft: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'D';
         break;
@@ -1725,7 +1748,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_CursorRight: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'C';
         break;
@@ -1737,7 +1760,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_PageDown: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '6'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
         break;
@@ -1749,7 +1772,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_PageUp: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '5'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
         break;
@@ -1767,7 +1790,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_Insert: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = '~';
         break;
@@ -1780,7 +1803,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Alt_Home: {
       s.add( "" );
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'H';
         break;
@@ -1793,7 +1816,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     case K_Alt_End: {
       s.add( "" );
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'F';
         break;
@@ -1805,7 +1828,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_CursorUp: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'A';
         break;
@@ -1817,7 +1840,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_CursorDown: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'B';
         break;
@@ -1829,7 +1852,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_CursorLeft: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'D';
         break;
@@ -1841,7 +1864,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_CursorRight: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'C';
         break;
@@ -2006,7 +2029,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_F1: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 4;
         buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'P';
         break;
@@ -2018,7 +2041,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_F2: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 4;
         buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'Q';
         break;
@@ -2030,7 +2053,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_F3: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 4;
         buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'R';
         break;
@@ -2042,7 +2065,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_F4: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 4;
         buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'S';
         break;
@@ -2054,7 +2077,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_F5: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
         break;
@@ -2066,7 +2089,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_F6: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '7'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
         break;
@@ -2078,7 +2101,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_F7: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '8'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
         break;
@@ -2090,7 +2113,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_F8: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '9'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
         break;
@@ -2102,7 +2125,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_F9: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '0'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
         break;
@@ -2114,7 +2137,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_F10: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '1'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
         break;
@@ -2126,7 +2149,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_F11: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '3'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
         break;
@@ -2138,7 +2161,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_F12: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '4'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
         break;
@@ -2150,7 +2173,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_F1: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 4;
         buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'P';
         break;
@@ -2162,7 +2185,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_F2: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 4;
         buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'Q';
         break;
@@ -2174,7 +2197,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_F3: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 4;
         buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'R';
         break;
@@ -2186,7 +2209,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_F4: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 4;
         buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'S';
         break;
@@ -2198,7 +2221,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_F5: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
         break;
@@ -2210,7 +2233,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_F6: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
         break;
@@ -2222,7 +2245,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_F7: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '8'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
         break;
@@ -2234,7 +2257,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_F8: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '9'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
         break;
@@ -2246,7 +2269,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_F9: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '0'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
         break;
@@ -2258,7 +2281,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_F10: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '1'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
         break;
@@ -2270,7 +2293,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_F11: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '3'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
         break;
@@ -2282,7 +2305,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_F12: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '4'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[7] = '~';
         break;
@@ -2300,7 +2323,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_Delete: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
         break;
@@ -2312,7 +2335,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_Delete: {
       uint16_t flags = bioskey(K_KEY_FLAGS);
-      if ( flags & 0x03 ){
+      if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = '~';
         break;
@@ -2762,6 +2785,12 @@ void getCfgOpts( void ) {
     SendBsAsDel = SendBsAsDel != 0;
   }
 
+  if ( Utils::getAppValue( "TELNET_CGA", tmp, 10 ) == 0 ) {
+    if ( atoi(tmp) >= 1 ){
+      g.useMcga = false;
+    }
+  }
+
   if ( Utils::getAppValue( "TELNET_SEND_NEWLINE", tmp, 10 ) == 0 ) {
     if ( stricmp( tmp, "CR/LF" ) == 0 ) {
       NewLineMode = 0;
@@ -2824,7 +2853,7 @@ static void shutdown( int rc ) {
 // processed.
 
 static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
-  if ( mouse.xterm_any && mouse.showing ){
+  if ( mouse.xterm_any && mouse.showing ) {
     mouse_hide();
   }
 
@@ -2860,6 +2889,15 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
         StreamState = OSC_SEEN;
 
       }
+      else if ( recvBuffer[i] == 'P' ) {
+
+        if ( g.sixelReady ){
+          break;
+        }
+        g.reset();
+        StreamState = DCS_SEEN;
+
+      }
       else {
         // Esc char was eaten - return to normal processing.
 
@@ -2889,6 +2927,18 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
       // Bump i by the number of *additional* bytes processed
       i = i + rc - 1;
 
+      //s.updateVidBufPtr( );
+    }
+    else if ( StreamState == DCS_SEEN ) {
+
+      uint16_t rc = g.processDCSSeq( recvBuffer+i, (len-i) );
+
+      // Bump i by the number of *additional* bytes processed
+      i = i + rc - 1;
+
+      if ( g.done ){
+        StreamState = Normal;
+      }
       //s.updateVidBufPtr( );
     }
     else if ( StreamState == UTF2_SEEN ) {
@@ -2993,7 +3043,7 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
 
   }  // end for
 
-  if ( mouse.xterm_any && mouse.should_show ){
+  if ( mouse.xterm_any && mouse.should_show ) {
     mouse_show();
   }
   return (len - i);
@@ -3431,7 +3481,7 @@ static uint16_t processUTF3Seq( uint8_t *buffer, uint16_t len ) {
     utf_chars_seen++;
     bytesProcessed++;
   }
-  if ( utf_chars_seen == 3 ){
+  if ( utf_chars_seen == 3 ) {
     s.add( utf_chars, 3 );
     StreamState = Normal;
   }
@@ -3582,46 +3632,45 @@ static uint16_t processOSCSeq( uint8_t *buffer, uint16_t len ) {
 
     uint8_t c = buffer[i];
 
-    if ( c == 7 ){
+    if ( c == 7 ) {
       commandLetter = c;
       i++;
       break;
     }
-    if ( c == 0x1b && ( i + 1 < len ) && buffer[i + 1] == 0x5c ){
+    if ( c == 0x1b ) {
       commandLetter = c;
-      i += 2;
       break;
     }
-    else if ( c == ';' ) {
-      if ( parmsFound < CSI_ARGS ) parmsFound++;
-      if ( oscParseState == LookForPs ){
-        oscParseState = LookForClipboardCode;
-      }
-      else if ( oscParseState == LookForClipboardCode ){
-        oscParseState = LookForData;
-      }
-    }
-    else if ( oscParseState == LookForPs ){
-      if ( isdigit( c ) ) {
-        if ( parms[ parmsFound ] == CSI_DEFAULT_ARG ) parms[ parmsFound ] = 0;
+    // else if ( c == ';' ) {
+    //   if ( parmsFound < CSI_ARGS ) parmsFound++;
+    //   if ( oscParseState == LookForPs ) {
+    //     oscParseState = LookForClipboardCode;
+    //   }
+    //   else if ( oscParseState == LookForClipboardCode ) {
+    //     oscParseState = LookForData;
+    //   }
+    // }
+    // else if ( oscParseState == LookForPs ) {
+    //   if ( isdigit( c ) ) {
+    //     if ( parms[ parmsFound ] == CSI_DEFAULT_ARG ) parms[ parmsFound ] = 0;
 
-        parms[ parmsFound ] = parms[ parmsFound ] * 10 + c - '0';
-      }
-    }
-    else if ( oscParseState == LookForClipboardCode ){
-      if ( isdigit( c ) ) {
-        cutBuffer = c - '0';
-      }
-      else {
-        clipboardType = c;
-      }
-    }
-    else if ( oscParseState == LookForData ){
-      if ( c == '?' ){
-        clipboardStore = false;
-      }
-      incomingClipboard[j++] = c;
-    }
+    //     parms[ parmsFound ] = parms[ parmsFound ] * 10 + c - '0';
+    //   }
+    // }
+    // else if ( oscParseState == LookForClipboardCode ) {
+    //   if ( isdigit( c ) ) {
+    //     cutBuffer = c - '0';
+    //   }
+    //   else {
+    //     clipboardType = c;
+    //   }
+    // }
+    // else if ( oscParseState == LookForData ) {
+    //   if ( c == '?' ) {
+    //     clipboardStore = false;
+    //   }
+    //   incomingClipboard[j++] = c;
+    // }
     i++;
   }
 
@@ -3631,18 +3680,18 @@ static uint16_t processOSCSeq( uint8_t *buffer, uint16_t len ) {
 
   StreamState = Normal;
 
-  if ( clipboardStore ){
-    if (j == 0){ // clear the selection
-      s.selection.buf[0] = 0;
-    }
-    else{
-      incomingClipboard[j++] = 0;
-      base64_decode(incomingClipboard, s.selection.buf, MAX_SELECTION_SIZE);
-    }
-  }
-  else{
-    needToSendSelection = true;
-  }
+  // if ( clipboardStore ) {
+  //   if (j == 0) { // clear the selection
+  //     s.selection.buf[0] = 0;
+  //   }
+  //   else {
+  //     incomingClipboard[j++] = 0;
+  //     base64_decode(incomingClipboard, s.selection.buf, MAX_SELECTION_SIZE);
+  //   }
+  // }
+  // else {
+  //   needToSendSelection = true;
+  // }
 
   return bytesProcessed;
 }
@@ -4137,10 +4186,10 @@ void processDecPrivateControl( uint8_t commandLetter ) {
         } else if ( parms[i] == 2004 ) {
           mouse.bracketed_paste = true;
         }
-        if ( mouse.xterm_normal || mouse.xterm_sgr || mouse.xterm_motion ){
+        if ( mouse.xterm_normal || mouse.xterm_sgr || mouse.xterm_motion ) {
           mouse.xterm_any = true;
         }
-        else{
+        else {
           mouse.xterm_any = false;
         }
 
@@ -4167,10 +4216,10 @@ void processDecPrivateControl( uint8_t commandLetter ) {
         } else if ( parms[i] == 2004 ) {
           mouse.bracketed_paste = false;
         }
-        if ( mouse.xterm_normal || mouse.xterm_sgr || mouse.xterm_motion ){
+        if ( mouse.xterm_normal || mouse.xterm_sgr || mouse.xterm_motion ) {
           mouse.xterm_any = true;
         }
-        else{
+        else {
           mouse.xterm_any = false;
           mouse_hide();
         }

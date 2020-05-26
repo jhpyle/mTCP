@@ -114,6 +114,8 @@ inline static uint8_t UTF8Decode( uint8_t *p, uint16_t *c ) {
 
 int8_t Screen::init( uint8_t backScrollPages, uint8_t initWrapMode ) {
 
+  usingGraphics = false;
+
   preventSnow = false;
 
   // This always works:
@@ -294,10 +296,12 @@ void Screen::myCprintf_internal( uint8_t x, uint8_t y, uint8_t attr, char *fmt, 
         x++;
         if ( x == terminalCols ) { x=0; y++; };
         uint16_t ch = ( attr << 8 | c );
-        if ( preventSnow ) {
-          writeCharWithoutSnow(screenBaseSeg, FP_OFF(start),  ch  );
-        } else {
-          *start = ch;
+        if ( !usingGraphics ){
+          if ( preventSnow ) {
+            writeCharWithoutSnow(screenBaseSeg, FP_OFF(start),  ch  );
+          } else {
+            *start = ch;
+          }
         }
         start++;
         break;
@@ -986,7 +990,7 @@ void Screen::add( char *buf, uint16_t len ) {
 
       //TRACE(( "    overhang = %u, cursor_x = %u\n", overhang, cursor_x ));
 
-      if ( updateRealScreen ) {
+      if ( updateRealScreen && !usingGraphics ) {
 
         uint16_t ch = ( curAttr << 8 | c );
 
@@ -1026,6 +1030,9 @@ void Screen::add( char *buf, uint16_t len ) {
 
 void Screen::paint( void ) {
 
+  if ( usingGraphics ){
+    return;
+  }
   uint16_t vOffset = ScrOffset( 0, 0 );
   uint16_t sOffset = 0;
 
@@ -1051,6 +1058,10 @@ void Screen::paint( void ) {
 
 
 void Screen::paint( int16_t offsetLines ) {
+
+  if (usingGraphics){
+    return;
+  }
 
   // I'm a little paranoid about mixing signed and unsigned types, so jump
   // through a little extra code to ensure that backScrollOffset can be
@@ -1115,6 +1126,9 @@ void Screen::paint( int16_t offsetLines ) {
 
 void Screen::clear( uint16_t top_x, uint16_t top_y, uint16_t bot_x, uint16_t bot_y ) {
 
+  if (usingGraphics){
+    return;
+  }
   uint16_t far *start = (uint16_t far *)(buffer + ScrOffset( top_x, top_y ));
   uint16_t far *end = (uint16_t far *)(buffer + ScrOffset( bot_x, bot_y ));
 
@@ -1201,6 +1215,9 @@ void Screen::clear( uint16_t top_x, uint16_t top_y, uint16_t bot_x, uint16_t bot
 
 void Screen::insLine( uint16_t line_y ) {
 
+  if (usingGraphics){
+    return;
+  }
   if ( line_y > scrollRegion_bottom ) return;
 
   // To insert a line, all visible lines below the current line get
@@ -1233,6 +1250,9 @@ void Screen::insLine( uint16_t line_y ) {
 
 void Screen::delLine( uint16_t line_y ) {
 
+  if (usingGraphics){
+    return;
+  }
   if ( line_y > scrollRegion_bottom ) return;
 
   for ( uint8_t i=line_y; i < scrollRegion_bottom; i++ ) {
@@ -1266,6 +1286,9 @@ void Screen::delLine( uint16_t line_y ) {
 
 void Screen::delChars( uint16_t len ) {
 
+  if (usingGraphics){
+    return;
+  }
   uint16_t affectedChars = terminalCols - cursor_x;
 
   if ( len > affectedChars ) {
@@ -1325,6 +1348,9 @@ void Screen::delChars( uint16_t len ) {
 
 void Screen::insChars( uint16_t len ) {
 
+  if (usingGraphics){
+    return;
+  }
   uint16_t affectedChars = terminalCols - cursor_x;
 
   if ( len > affectedChars ) {
@@ -1379,6 +1405,9 @@ void Screen::insChars( uint16_t len ) {
 
 void Screen::eraseChars( uint16_t len ) {
 
+  if (usingGraphics){
+    return;
+  }
   // Set the next n chars to be a space with the current attribute.
   // Do not adjust the cursor position to do this.
 

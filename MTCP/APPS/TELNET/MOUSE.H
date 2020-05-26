@@ -39,7 +39,7 @@
 #define MOUSE_MIDDLE 4
 //#define MOUSE_DOUBLE_START 8
 //#define MOUSE_TICKS_DOUBLE_CLICK 5
-#define MOUSE_TICKS_MIDDLE_CLICK 4
+#define MOUSE_TICKS_MIDDLE_CLICK 5
 #define MOUSE_TICKS_SHOW_DURATION 140
 #define MOUSE_UP 0
 #define MOUSE_DOWN 1
@@ -52,7 +52,7 @@
 extern "C" uint16_t cdecl ibm_mouse_init( void );
 extern "C" uint16_t cdecl ibm_mouse_show( void );
 extern "C" uint16_t cdecl ibm_mouse_hide( void );
-extern "C" uint16_t cdecl ibm_mouse_get_status( uint16_t far *buttons, uint16_t far *column, uint16_t far *row );
+//extern "C" uint16_t cdecl ibm_mouse_get_status( uint16_t far *buttons, uint16_t far *column, uint16_t far *row );
 extern "C" uint16_t cdecl ibm_mouse_get_time( uint32_t far *time );
 extern "C" uint16_t cdecl ibm_mouse_install( void );
 extern "C" uint16_t cdecl ibm_mouse_uninstall( void );

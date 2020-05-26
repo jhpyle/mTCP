@@ -1,4 +1,4 @@
-;  mTCP mouse.asm
+;  mTCP misc.asm
 ;  Copyright (C) 2020 Jonathan H. Pyle (jhpyle@gmail.com)
 ;  mTCP web page: http://www.brutman.com/mTCP
 ;
@@ -19,18 +19,19 @@
 ;  along with mTCP.  If not, see <http://www.gnu.org/licenses/>.
 ;
 ;
-;  Description: Mouse interface for 8086
+;  Description: Mouse and graphics interface
 ;
 ;  Changes:
 ;
 ;  2020-05-17: Initial release
+;  2020-05-25: Renamed from mouse.asm, now includes graphics related functions
 
 
 
 .8086
 
 
-name MOUSE
+name MISC
 
 LDOWN equ 1
 RDOWN equ 2
@@ -179,30 +180,30 @@ _ibm_mouse_hide proc far
 
 _ibm_mouse_hide endp
 
-public _ibm_mouse_get_status
+;; public _ibm_mouse_get_status
 
-_ibm_mouse_get_status proc far
+;; _ibm_mouse_get_status proc far
 
-	push    bp
-	mov     bp,sp
+;; 	push    bp
+;; 	mov     bp,sp
 
-	push    ds
-	push    si
+;; 	push    ds
+;; 	push    si
 
-	mov     ax, 3
-	int     0x33
-	mov     di, [bp+X]
-	mov     [di], bx
-	mov     di, [bp+X+4]
-	mov     [di], cx
-	mov     di, [bp+X+8]
-	mov     [di], dx
-	pop     si
-	pop     ds
-	pop     bp
-	ret
+;; 	mov     ax, 3
+;; 	int     0x33
+;; 	mov     di, [bp+X]
+;; 	mov     [di], bx
+;; 	mov     di, [bp+X+4]
+;; 	mov     [di], cx
+;; 	mov     di, [bp+X+8]
+;; 	mov     [di], dx
+;; 	pop     si
+;; 	pop     ds
+;; 	pop     bp
+;; 	ret
 
-_ibm_mouse_get_status endp
+;; _ibm_mouse_get_status endp
 
 
 public _ibm_mouse_get_time
@@ -369,14 +370,166 @@ _ibm_mouse_handler proc far
 	mov	_buffer_end, al
 	jmp	@@continue
 @@overflow:
-	mov 	dl, 4fh
-	mov 	ah, 2
-        int 	21h
 @@continue:
 	pop es
 	ret
 
 _ibm_mouse_handler endp
+
+
+public _start_graphics
+
+_start_graphics proc far
+
+	push    bp
+	mov     bp,sp
+
+	push    ds
+	push    si
+
+	lds     si, [bp+X]
+	mov	ah, 0
+        mov     al, [ds:si]
+        int     10h
+
+	pop     si
+	pop     ds
+	pop     bp
+	ret
+
+_start_graphics endp
+
+public _set_cga_palette
+
+_set_cga_palette proc far
+
+	push    bp
+	mov     bp,sp
+
+	push    ds
+	push    si
+
+	lds     si, [bp+X]
+        mov     bl, [ds:si]
+	mov 	ah, 0bh
+	int 	10h
+
+	lds     si, [bp+X+4]
+        mov     bl, [ds:si]
+	xor	bh, bh
+	int 	10h
+
+	pop     si
+	pop     ds
+	pop     bp
+	ret
+
+_set_cga_palette endp
+
+public _set_mcga_palette
+
+_set_mcga_palette proc far
+
+	push    bp
+	mov     bp,sp
+
+	push    ds
+	push    si
+
+        cli
+        mov     dx, 3c8h
+        xor     al, al
+        out     dx, al
+        inc     dx
+        mov     cx, (256*3)
+	lds     si, [bp+X]
+        cld
+@@pl1:
+        lodsb
+        out     dx,al
+        loop    @@pl1
+	sti
+
+	pop     si
+	pop     ds
+	pop     bp
+	ret
+
+_set_mcga_palette endp
+
+public _write_mcga_graphics
+
+_write_mcga_graphics proc far
+
+	push    bp
+	mov     bp,sp
+
+	push    ds
+	push    si
+
+        cli
+	lds     si, [bp+X]
+	mov	ax, 0a000h
+	mov 	es, ax
+	xor 	di, di
+	mov	cx, 32000
+        cld
+        rep movsw
+	sti
+
+	pop     si
+	pop     ds
+	pop     bp
+	ret
+
+_write_mcga_graphics endp
+
+public _write_cga_graphics
+
+_write_cga_graphics proc far
+
+	push    bp
+	mov     bp,sp
+
+	push    ds
+	push    si
+
+        cli
+	lds     si, [bp+X]
+	mov	ax, 0b800h
+	mov 	es, ax
+	xor 	di, di
+	mov	cx, 8096
+        cld
+        rep movsw
+	sti
+
+	pop     si
+	pop     ds
+	pop     bp
+	ret
+
+_write_cga_graphics endp
+
+public _stop_graphics
+
+_stop_graphics proc far
+
+	push    bp
+	mov     bp,sp
+
+	push    ds
+	push    si
+
+        mov     ax, 3
+        int     10h
+
+	pop     si
+	pop     ds
+	pop     bp
+	ret
+
+_stop_graphics endp
 
 _TEXT ends
 
