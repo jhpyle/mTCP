@@ -55,8 +55,8 @@ First, if the server sends back `xterm` [DECSET] signals to enable
 mouse tracking, mouse activity is transmitted to the server using the
 `xterm` escape sequences.  [Emacs] sends these sequences when
 `xterm-mouse-mode` is in use, and [Vim] sends them when `set mouse=a`
-is used, Midnight Commander requires `-x` switch to force xterm mode
-with mouse support.
+is used.  Midnight Commander requires the `-x` switch to force `xterm`
+mode with mouse support.
 
 Second, if the [DECSET] signals are not received, mouse activity does
 not result in escape sequences sent to the terminal, but the mouse can
