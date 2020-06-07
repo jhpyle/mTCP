@@ -102,6 +102,7 @@ class Screen {
     void initializeSelection();
     void populateSelection();
     void highlightSelection( bool highlight );
+    void updateSelectionPart( uint16_t start, uint16_t end );
     void updateHighlight();
 
     void add( char *buf );
@@ -132,7 +133,7 @@ class Screen {
     }
 
     uint16_t Screen::ScrRelative( uint16_t point ){
-      if ( point > topOffset ){
+      if ( point >= topOffset ){
         return (point - topOffset);
       }
       else{

@@ -38,7 +38,7 @@ The following keys are transmitted:
 In the official [mTCP], Page Up and Page Down scroll are not passed
 through but are used for scrolling through the output history.  In
 this version, that function is moved to the Alt-Page Up and Alt-Page
-Down keys (or Ctrl-Page Up and Ctrl-Page Dn with [TEL8088.EXE]), and
+Down keys (or Ctrl-Page Up and Ctrl-Page Dn with [TNOLDKEY.EXE]), and
 Page Up and Page Down are passed through to the server.
 
 For compatibility with [Emacs], all Alt-(key) combinations that are
@@ -55,8 +55,8 @@ First, if the server sends back `xterm` [DECSET] signals to enable
 mouse tracking, mouse activity is transmitted to the server using the
 `xterm` escape sequences.  [Emacs] sends these sequences when
 `xterm-mouse-mode` is in use, and [Vim] sends them when `set mouse=a`
-is used.  Midnight Commander requires the `-x` switch to force `xterm`
-mode with mouse support.
+is used.  Midnight Commander provides mouse support if the `-x` switch
+is used to enable `xterm` mode.
 
 Second, if the [DECSET] signals are not received, mouse activity does
 not result in escape sequences sent to the terminal, but the mouse can
@@ -122,7 +122,7 @@ Show the usage instructions:
 These changes have been tested on an IBM PS/2 Model 25 running MS-DOS
 6.22 and Microsoft Mouse Driver ([MOUSE.COM]) version 7.03.  If your
 machine does not have support for the "enhanced keyboard," try the
-[TEL8088.EXE] file instead, which supports fewer keystrokes but should
+[TNOLDKEY.EXE] file instead, which supports fewer keystrokes but should
 work on older machines.  Try [TELNET.EXE] first and see if it works,
 regardless of what machine you have.
 
@@ -245,7 +245,7 @@ You can also view images using [Sixel graphics] while using [Lynx].
 You can press `*` to show links to images, or set
 `MAKE_LINKS_FOR_ALL_IMAGES:TRUE` in your `/etc/lynx.cfg` file to turn
 this feature on by default.  When you click on a link to an image,
-your `.mailcap` file will be consulted and the [show] command will be
+your `~/.mailcap` file will be consulted and the [show] command will be
 used to show the image.
 
 You can also view images while using [Links].  To set this up, go to
@@ -267,6 +267,19 @@ following:
 
 Image support is a little better in [Lynx] than it is on [Links]
 because it will show a link to an image that is itself a hyperlink.
+
+If you are using Midnight Commander, you can edit the file
+`/usr/lib/mc/ext.d/image.sh` and change this line:
+
+    ("${MC_XDG_OPEN}" "${MC_EXT_FILENAME}" >/dev/null 2>&1) || \
+
+to:
+
+    ("${MC_XDG_OPEN}" "${MC_EXT_FILENAME}") || \
+
+Then, if your `~/.mailcap` has been set up as discussed above, the
+`xdg-open` command will run `show` in the terminal when you open an
+image file.
 
 ## Compiling
 
@@ -319,7 +332,7 @@ forgot exactly how make works.)  For a final build you should run
 [ansi.src]: https://github.com/jhpyle/mTCP/blob/master/ansi.src
 [MAKEFILE]: https://github.com/jhpyle/mTCP/blob/master/MTCP/APPS/TELNET/MAKEFILE
 [TELNET.EXE]: https://github.com/jhpyle/mTCP/blob/master/MTCP/APPS/TELNET/TELNET.EXE
-[TEL8088.EXE]: https://github.com/jhpyle/mTCP/blob/master/MTCP/APPS/TELNET/TEL8088.EXE
+[TNOLDKEY.EXE]: https://github.com/jhpyle/mTCP/blob/master/MTCP/APPS/TELNET/TNOLDKEY.EXE
 [APPS/TELNET]: https://github.com/jhpyle/mTCP/blob/master/MTCP/APPS/TELNET
 [mTCP]: https://www.brutman.com/
 [ansi.el]: https://github.com/jhpyle/mTCP/blob/master/ansi.el

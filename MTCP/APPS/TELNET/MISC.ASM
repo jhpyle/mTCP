@@ -25,8 +25,7 @@
 ;
 ;  2020-05-17: Initial release
 ;  2020-05-25: Renamed from mouse.asm, now includes graphics related functions
-
-
+;  2020-06-07: Fixed bug with CGA palette function
 
 .8086
 
@@ -56,15 +55,15 @@ else
       .model large
     else
       ifdef __MEDIUM__
-        ; far code, near data
-        X equ 6
-        .model medium
+	; far code, near data
+	X equ 6
+	.model medium
       else
-        ifdef __HUGE__
-          ; far code, far data
-          X equ 6
-          .model huge
-        endif
+	ifdef __HUGE__
+	  ; far code, far data
+	  X equ 6
+	  .model huge
+	endif
       endif
     endif
   endif
@@ -238,10 +237,10 @@ _ibm_mouse_install proc far
 
 	;; mov 	dl, 41h
 	;; mov 	ah, 2
-        ;; int 	21h
+	;; int 	21h
 
 	mov 	ax, 21h
-        int 	33h
+	int 	33h
 
 	mov 	ax,14h
 	push	cs
@@ -278,8 +277,8 @@ _ibm_mouse_uninstall proc far
 	mov     dx, oldVectorDX
 	int     33h
 
-        sub     ax, ax
-        int     33h
+	sub     ax, ax
+	int     33h
 
 	pop     ds
 	pop     es
@@ -289,8 +288,8 @@ _ibm_mouse_uninstall endp
 
 ;; _ibm_mouse_handler proc far
 ;; 	push 	es
-;;         push    cs
-;;         pop     ds
+;;	 push    cs
+;;	 pop     ds
 ;; 	mov 	_mouse_changed, 1
 ;; 	test    bl, 1
 ;; 	jz      @@checkright
@@ -311,8 +310,8 @@ _ibm_mouse_uninstall endp
 
 _ibm_mouse_handler proc far
 	push 	es
-        push    cs
-        pop     ds
+	push    cs
+	pop     ds
 	mov 	_mouse_changed, 1
 	mov 	ax, cx
 	mov	cl, 3
@@ -388,9 +387,9 @@ _start_graphics proc far
 	push    si
 
 	lds     si, [bp+X]
+	mov     al, [ds:si]
 	mov	ah, 0
-        mov     al, [ds:si]
-        int     10h
+	int     10h
 
 	pop     si
 	pop     ds
@@ -410,13 +409,14 @@ _set_cga_palette proc far
 	push    si
 
 	lds     si, [bp+X]
-        mov     bl, [ds:si]
+	mov     bl, [ds:si]
+	mov     bh, 1
 	mov 	ah, 0bh
 	int 	10h
 
+	xor	bx, bx
 	lds     si, [bp+X+4]
-        mov     bl, [ds:si]
-	xor	bh, bh
+	mov     bl, [ds:si]
 	int 	10h
 
 	pop     si
@@ -436,18 +436,18 @@ _set_mcga_palette proc far
 	push    ds
 	push    si
 
-        cli
-        mov     dx, 3c8h
-        xor     al, al
-        out     dx, al
-        inc     dx
-        mov     cx, (256*3)
+	cli
+	mov     dx, 3c8h
+	xor     al, al
+	out     dx, al
+	inc     dx
+	mov     cx, (256*3)
 	lds     si, [bp+X]
-        cld
+	cld
 @@pl1:
-        lodsb
-        out     dx,al
-        loop    @@pl1
+	lodsb
+	out     dx,al
+	loop    @@pl1
 	sti
 
 	pop     si
@@ -467,14 +467,14 @@ _write_mcga_graphics proc far
 	push    ds
 	push    si
 
-        cli
+	cli
 	lds     si, [bp+X]
 	mov	ax, 0a000h
 	mov 	es, ax
 	xor 	di, di
 	mov	cx, 32000
-        cld
-        rep movsw
+	cld
+	rep movsw
 	sti
 
 	pop     si
@@ -494,14 +494,14 @@ _write_cga_graphics proc far
 	push    ds
 	push    si
 
-        cli
+	cli
 	lds     si, [bp+X]
 	mov	ax, 0b800h
 	mov 	es, ax
 	xor 	di, di
 	mov	cx, 8096
-        cld
-        rep movsw
+	cld
+	rep movsw
 	sti
 
 	pop     si
@@ -521,8 +521,8 @@ _stop_graphics proc far
 	push    ds
 	push    si
 
-        mov     ax, 3
-        int     10h
+	mov     ax, 3
+	int     10h
 
 	pop     si
 	pop     ds

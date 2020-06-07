@@ -60,6 +60,10 @@ public:
 
   uint16_t processDCSSeq( uint8_t *buffer, uint16_t len );
   void     reset( void );
+  void     sixel_Mono_Mcga( void );
+  void     sixel_Mono_Cga( void );
+  void     sixel_Mcga256( void );
+  void     sixel_Cga( void );
   void     showImage( void );
   void     returnToTextMode( void );
   void     initializeGraphics( void );
@@ -72,7 +76,7 @@ public:
   bool     enabled;
   bool     useMcga;
 
-private:
+  //private:
 
   bool     DCSParamSeen;
   bool     graphicsMode;
@@ -100,6 +104,8 @@ private:
   int16_t  sixel_current_color;
   uint16_t hmax;
   uint16_t vmax;
+  typedef void (Graphics::*fptr)();
+  fptr sixelFunc;
   int16_t  parms[ DCS_ARGS ];  // Array of parameters
   uint16_t parmsFound;         // Number of parameters found
   uint8_t  oldVideoMode;

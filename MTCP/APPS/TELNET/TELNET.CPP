@@ -53,7 +53,8 @@
    2020-05-10: Extended keyboard support.
    2020-05-17: Mouse support.
    2020-05-18: Fixed bug with Unicode characters at end of buffer.
-   2020-05-25: Added Sixel graphics support
+   2020-05-25: Added Sixel graphics support.
+   2020-06-07: Fixed bugs with selection and made graphics more efficient.
 
    Todo:
 
@@ -470,14 +471,14 @@ void mouse_uninstall( void ) {
 }
 
 void mouse_show( void ) {
-  if (mouse.installed && !(mouse.showing)) {
+  if (mouse.installed && !(mouse.showing) && !(s.usingGraphics)) {
     ibm_mouse_show();
     mouse.showing = true;
   }
 }
 
 void mouse_hide( void ) {
-  if (mouse.installed && mouse.showing) {
+  if (mouse.installed && mouse.showing && !(s.usingGraphics)) {
     ibm_mouse_hide();
     mouse.showing = false;
   }
@@ -497,12 +498,12 @@ uint8_t downRow = 255;
 uint8_t downCol = 255;
 
 void send_move() {
+  if ( s.usingGraphics ) return;
   if ( mouse.buttons == 0 || ( mouse.row == prevRow && mouse.column == prevCol ) ) {
     prevRow = mouse.row;
     prevCol = mouse.column;
     return;
   }
-  if ( mySocket->outgoingQueueIsFull( ) ) return;
   prevRow = mouse.row;
   prevCol = mouse.column;
   if ( !mouse.xterm_motion ) {
@@ -515,6 +516,7 @@ void send_move() {
     return;
   }
   if ( mouse.xterm_sgr ) {
+    if ( mySocket->outgoingQueueIsFull( ) ) return;
     uint8_t buttonVal = 32;
     DataBuf *buf = (DataBuf *)TcpBuffer::getXmitBuf( );
     uint8_t i = 0;
@@ -555,6 +557,7 @@ void send_move() {
     }
   }
   else if ( mouse.xterm_normal ) {
+    if ( mySocket->outgoingQueueIsFull( ) ) return;
     DataBuf *buf = (DataBuf *)TcpBuffer::getXmitBuf( );
     uint8_t i = 0;
     uint8_t Cb;
@@ -581,6 +584,7 @@ void send_move() {
 }
 
 void send_selection() {
+  if ( s.usingGraphics ) return;
   DataBuf *buf = (DataBuf *)TcpBuffer::getXmitBuf( );
   int selection_length = strlen(s.selection.buf);
   int i = 0;
@@ -610,7 +614,7 @@ void send_selection() {
 }
 
 void send_click( uint8_t direction, uint8_t buttonVal ) {
-  if ( mySocket->outgoingQueueIsFull( ) ) return;
+  if ( mySocket->outgoingQueueIsFull( ) || s.usingGraphics ) return;
   if ( mouse.xterm_sgr ) {
     // if (buttonVal == XTERM_BUTTON_MIDDLE) {
     //   if (direction == MOUSE_UP) {
@@ -1052,7 +1056,7 @@ int main( int argc, char *argv[] ) {
             }
             send_move();
           }
-            mouse.row = buffer_row[buffer_start] + 1;
+          mouse.row = buffer_row[buffer_start] + 1;
           mouse.column = buffer_col[buffer_start] + 1;
           button_change = buffer_buttons[buffer_start] ^ buffer_buttons[buffer_prev];
 
@@ -1204,9 +1208,10 @@ int main( int argc, char *argv[] ) {
 
       if ( s.usingGraphics ){
         g.returnToTextMode();
-        mouse_install();
         s.usingGraphics = false;
         s.paint();
+        mouse.should_show = false;
+        mouse_hide();
       }
       else {
         if ( key.specialKey != K_NoKey ) {
@@ -1262,20 +1267,6 @@ int main( int argc, char *argv[] ) {
     // The other side closed or the user requested an exit.  We want to do a
     // controlled close of the socket while processing any remaining incoming
     // data.  But there has to be a reasonable timeout period.
-
-    if ( g.sixelReady ) {
-      if ( g.sixelInvalid == 0 ){
-        s.usingGraphics = true;
-        mouse_hide();
-        mouse_uninstall();
-        g.showImage();
-      }
-      else {
-        sprintf( tmpBuf, "\r\nSixel error: %d c%d %dx%d\r\n", g.sixelInvalid, g.sixelColors, g.sixelPh, g.sixelPv );
-        s.add(tmpBuf);
-      }
-      g.sixelReady = false;
-    }
 
     if ( done ) {
       if ( done == 1 ) {
@@ -3046,6 +3037,20 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
   if ( mouse.xterm_any && mouse.should_show ) {
     mouse_show();
   }
+
+  if ( g.sixelReady ) {
+    if ( g.sixelInvalid == 0 ){
+      mouse_hide();
+      s.usingGraphics = true;
+      g.showImage();
+    }
+    else {
+      sprintf( tmpBuf, "\r\nSixel error: %d c%d %dx%d %d\r\n", g.sixelInvalid, g.sixelColors, g.sixelPh, g.sixelPv, g.videoMode );
+      s.add(tmpBuf);
+    }
+    g.sixelReady = false;
+  }
+
   return (len - i);
 }
 
@@ -3867,6 +3872,9 @@ void processAnsiCommand( uint8_t commandLetter ) {
 
     case 'J': {
       if ( parms[0] == CSI_DEFAULT_ARG ) parms[0] = 0;
+      mouse_hide();
+      mouse.should_show = false;
+      s.highlightSelection(false);
       switch ( parms[0] ) {
         case 0: {
           s.clear( s.cursor_x, s.cursor_y, s.terminalCols-1, s.terminalLines-1 );
@@ -4221,6 +4229,7 @@ void processDecPrivateControl( uint8_t commandLetter ) {
         }
         else {
           mouse.xterm_any = false;
+          mouse.should_show = false;
           mouse_hide();
         }
       }

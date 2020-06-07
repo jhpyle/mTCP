@@ -137,6 +137,7 @@
 #define K_Local_PageUp      (96)
 #define K_CenterKey         (97)
 #define K_Ctrl_PrtScr       (98)
+#ifndef OLDPC
 #define K_KEY_GET           0x10
 #define K_KEY_CHECK         0x11
 #define K_KEY_FLAGS         0x12
@@ -144,9 +145,11 @@
 // Comment out the above three lines and uncomment the following three
 // lines if you need to support an older PC without extended keyboard
 // support
-// #define K_KEY_GET           0x00
-// #define K_KEY_CHECK         0x01
-// #define K_KEY_FLAGS         0x02
+#else
+#define K_KEY_GET           0x00
+#define K_KEY_CHECK         0x01
+#define K_KEY_FLAGS         0x02
+#endif
 
 typedef struct {
   uint8_t specialKey;  // K_NoKey, K_NormalKey, or a special key code

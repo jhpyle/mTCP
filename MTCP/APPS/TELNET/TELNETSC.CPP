@@ -32,6 +32,7 @@
    2015-01-22: Add 132 column support
    2018-10-27: Add code to prevent CGA snow
    2020-05-17: Mouse and Unicode support.
+   2020-06-07: Fixed bugs with selection and made more efficient.
 
 */
 
@@ -582,7 +583,7 @@ void Screen::readWord( uint16_t x, uint16_t y ) {
     if ( selection.end >= bufferSize ){
       selection.end = 0;
     }
-    if ( selection.end >= maxPoint ){
+    if ( selection.end == maxPoint ){
       break;
     }
     if ( buffer[selection.end] == 32 ){
@@ -618,6 +619,43 @@ void Screen::populateSelection(){
   selection.buf[i] = 0;
 }
 
+void Screen::updateSelectionPart( uint16_t start, uint16_t end ) {
+  if ( usingGraphics ) return;
+  uint16_t sStart = ScrRelative(start);
+  uint16_t sEnd = ScrRelative(end);
+  if ( sStart < screenSize ) {
+    while ( sEnd >= screenSize ) {
+      end -= 2;
+      if ( end == 0 ){
+        end = bufferSize;
+      }
+      sEnd = ScrRelative(end);
+    }
+  }
+  else if ( sEnd < screenSize ) {
+    while ( sStart > screenSize ) {
+      start += 2;
+      if ( start == bufferSize ){
+        start = 0;
+      }
+      sStart = ScrRelative(start);
+    }
+  }
+  else if ( sStart > screenSize && sEnd > screenSize ) {
+    return;
+  }
+  uint8_t far *source = buffer + start;
+  if ( preventSnow ) { waitForCGARetraceLong( ); }
+  if ( end >= start ) {
+    memcpy( Screen_base + sStart, source, end - start );
+  }
+  else {
+    memcpy( Screen_base + sStart, source, bufferSize - start );
+    source = buffer;
+    memcpy( Screen_base + sStart + ( bufferSize - start ), source, end );
+  }
+}
+
 void Screen::readLine( uint16_t y ) {
   selection.start = ScrOffset(0, y);
   selection.end = selection.start + bytesPerLine;
@@ -636,7 +674,7 @@ void Screen::highlightSelection(bool highlight) {
         j = 0;
       }
     }
-    paint();
+    updateSelectionPart(selection.start, selection.end);
     selection.highlighted = highlight;
     if (highlight){
       selection.oldStart = selection.start;
@@ -655,11 +693,14 @@ void Screen::updateHighlight(){
   uint16_t newEnd = ScrRelative(selection.end);
   uint16_t theStart;
   uint16_t theEnd;
+  uint16_t screenStart;
   if (oldStart < newStart){
     theStart = selection.oldStart;
+    screenStart = oldStart;
   }
   else{
     theStart = selection.start;
+    screenStart = newStart;
   }
   if (oldEnd > newEnd){
     theEnd = selection.oldEnd;
@@ -667,18 +708,21 @@ void Screen::updateHighlight(){
   else{
     theEnd = selection.end;
   }
-  while (theStart != theEnd){
-    if ( !(theStart >= selection.oldStart && theStart < selection.oldEnd && theStart >= selection.start && theStart < selection.end) ){
-      buffer[theStart + 1] = ( buffer[theStart + 1] & 128 ) | ( ( ~buffer[theStart + 1] ) & 127 );
+  uint16_t i = theStart;
+  uint16_t j = screenStart;
+  while (i != theEnd){
+    if ( !(j >= oldStart && j < oldEnd && j >= newStart && j < newEnd) ){
+      buffer[i + 1] = ( buffer[i + 1] & 128 ) | ( ( ~buffer[i + 1] ) & 127 );
     }
-    theStart += 2;
-    if (theStart >= bufferSize){
-      theStart = 0;
+    i += 2;
+    if (i >= bufferSize){
+      i = 0;
     }
+    j += 2;
   }
   selection.oldStart = selection.start;
   selection.oldEnd = selection.end;
-  paint();
+  updateSelectionPart(theStart, theEnd);
 }
 
 // This seems silly and we could solve the problem by adding
@@ -752,6 +796,17 @@ void Screen::add( char *buf, uint16_t len ) {
       case 0x2194: { c = 0x1d; break; }
       case 0x25b2: { c = 0x1e; break; }
       case 0x25bc: { c = 0x1f; break; }
+      case 0x201c: { c = 0x22; break; }
+      case 0x201d: { c = 0x22; break; }
+      case 0x2011: { c = 0x2d; break; }
+      case 0x2012: { c = 0x2d; break; }
+      case 0x2013: { c = 0x2d; break; }
+      case 0x2014: { c = 0x2d; break; }
+      case 0x2019: { c = 0x27; break; }
+      case 0x00ae: { c = 0x52; break; }
+      case 0x2018: { c = 0x60; break; }
+      case 0x00a9: { c = 0x63; break; }
+      case 0x00d7: { c = 0x78; break; }
       case 0x2302: { c = 0x7f; unspecial = false; break; }
       case 0x00c7: { c = 0x80; break; }
       case 0x00fc: { c = 0x81; break; }
@@ -779,7 +834,6 @@ void Screen::add( char *buf, uint16_t len ) {
       case 0x00f9: { c = 0x97; break; }
       case 0x00ff: { c = 0x98; break; }
       case 0x00d6: { c = 0x99; break; }
-      case 0x00d7: { c = 0x78; break; }
       case 0x00dc: { c = 0x9a; break; }
       case 0x00a2: { c = 0x9b; break; }
       case 0x00a3: { c = 0x9c; break; }
@@ -882,16 +936,6 @@ void Screen::add( char *buf, uint16_t len ) {
       case 0x00b2: { c = 0xfd; break; }
       case 0x25a0: { c = 0xfe; break; }
       case 0x00a0: { c = 0xff; break; }
-      case 0x201c: { c = 0x22; break; }
-      case 0x201d: { c = 0x22; break; }
-      case 0x2018: { c = 0x60; break; }
-      case 0x2019: { c = 0x27; break; }
-      case 0x2011: { c = 0x2d; break; }
-      case 0x2012: { c = 0x2d; break; }
-      case 0x2013: { c = 0x2d; break; }
-      case 0x2014: { c = 0x2d; break; }
-      case 0x00a9: { c = 0x63; break; }
-      case 0x00ae: { c = 0x52; break; }
       default:     { c = 0xa8; break; }
       }
     }
@@ -1030,9 +1074,7 @@ void Screen::add( char *buf, uint16_t len ) {
 
 void Screen::paint( void ) {
 
-  if ( usingGraphics ){
-    return;
-  }
+  if ( usingGraphics ) return;
   uint16_t vOffset = ScrOffset( 0, 0 );
   uint16_t sOffset = 0;
 
@@ -1056,12 +1098,9 @@ void Screen::paint( void ) {
 }
 
 
-
 void Screen::paint( int16_t offsetLines ) {
 
-  if (usingGraphics){
-    return;
-  }
+  if ( usingGraphics ) return;
 
   // I'm a little paranoid about mixing signed and unsigned types, so jump
   // through a little extra code to ensure that backScrollOffset can be
@@ -1126,9 +1165,7 @@ void Screen::paint( int16_t offsetLines ) {
 
 void Screen::clear( uint16_t top_x, uint16_t top_y, uint16_t bot_x, uint16_t bot_y ) {
 
-  if (usingGraphics){
-    return;
-  }
+  if ( usingGraphics ) return;
   uint16_t far *start = (uint16_t far *)(buffer + ScrOffset( top_x, top_y ));
   uint16_t far *end = (uint16_t far *)(buffer + ScrOffset( bot_x, bot_y ));
 
@@ -1215,9 +1252,7 @@ void Screen::clear( uint16_t top_x, uint16_t top_y, uint16_t bot_x, uint16_t bot
 
 void Screen::insLine( uint16_t line_y ) {
 
-  if (usingGraphics){
-    return;
-  }
+  if ( usingGraphics ) return;
   if ( line_y > scrollRegion_bottom ) return;
 
   // To insert a line, all visible lines below the current line get
@@ -1250,9 +1285,7 @@ void Screen::insLine( uint16_t line_y ) {
 
 void Screen::delLine( uint16_t line_y ) {
 
-  if (usingGraphics){
-    return;
-  }
+  if ( usingGraphics ) return;
   if ( line_y > scrollRegion_bottom ) return;
 
   for ( uint8_t i=line_y; i < scrollRegion_bottom; i++ ) {
@@ -1286,9 +1319,7 @@ void Screen::delLine( uint16_t line_y ) {
 
 void Screen::delChars( uint16_t len ) {
 
-  if (usingGraphics){
-    return;
-  }
+  if ( usingGraphics ) return;
   uint16_t affectedChars = terminalCols - cursor_x;
 
   if ( len > affectedChars ) {
@@ -1348,9 +1379,7 @@ void Screen::delChars( uint16_t len ) {
 
 void Screen::insChars( uint16_t len ) {
 
-  if (usingGraphics){
-    return;
-  }
+  if ( usingGraphics ) return;
   uint16_t affectedChars = terminalCols - cursor_x;
 
   if ( len > affectedChars ) {
@@ -1405,9 +1434,7 @@ void Screen::insChars( uint16_t len ) {
 
 void Screen::eraseChars( uint16_t len ) {
 
-  if (usingGraphics){
-    return;
-  }
+  if ( usingGraphics ) return;
   // Set the next n chars to be a space with the current attribute.
   // Do not adjust the cursor position to do this.
 

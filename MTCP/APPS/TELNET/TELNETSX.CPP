@@ -25,7 +25,7 @@
 
    Changes:
    2020-05-25: Initial release
-
+   2020-06-07: Fixed bugs and made more efficient.
 
 */
 
@@ -202,9 +202,11 @@ uint16_t Graphics::processDCSSeq( uint8_t *buffer, uint16_t len ) {
             hmax = 640;
             if ( useMcga ) {
               vmax = 480;
+              sixelFunc = &Graphics::sixel_Mono_Mcga;
             }
             else {
               vmax = 200;
+              sixelFunc = &Graphics::sixel_Mono_Cga;
             }
           }
           else {
@@ -213,28 +215,36 @@ uint16_t Graphics::processDCSSeq( uint8_t *buffer, uint16_t len ) {
             if ( sixelColors == 4 ) {
               if ( palette[6] == 62 && palette[7] == 19 && palette[8] == 62 ) {
                 videoMode = LightCyanMagenta;
+                sixelFunc = &Graphics::sixel_Cga;
               }
               else if ( palette[6] == 42 && palette[7] == 0 && palette[8] == 42 ) {
                 videoMode = CyanMagenta;
+                sixelFunc = &Graphics::sixel_Cga;
               }
               else if ( palette[6] == 62 && palette[7] == 19 && palette[8] == 19 ) {
                 videoMode = LightGreenRed;
+                sixelFunc = &Graphics::sixel_Cga;
               }
               else if ( palette[6] == 42 && palette[7] == 0 && palette[8] == 0 ) {
                 videoMode = GreenRed;
+                sixelFunc = &Graphics::sixel_Cga;
               }
               else if ( useMcga ){
                 videoMode = MCGA256;
+                sixelFunc = &Graphics::sixel_Mcga256;
               }
               else {
                 videoMode = LightCyanMagenta;
+                sixelFunc = &Graphics::sixel_Cga;
               }
             }
             else if ( useMcga ){
               videoMode = MCGA256;
+              sixelFunc = &Graphics::sixel_Mcga256;
             }
             else {
               videoMode = LightCyanMagenta;
+              sixelFunc = &Graphics::sixel_Cga;
             }
           }
           if ( videoMode == Mono && useMcga ) {
@@ -266,72 +276,7 @@ uint16_t Graphics::processDCSSeq( uint8_t *buffer, uint16_t len ) {
             }
           }
           else {
-            sixel_vertical_mask = 0x01;
-            if (sixel_repeat_count <= 1) {
-              for (sixel_i = 0; sixel_i < 6; sixel_i++) {
-                if ((sixel_bits & sixel_vertical_mask) != 0) {
-                  if ( videoMode == Mono ) {
-                    if ( useMcga ) {
-                      image[(sixelY + sixel_i) * 80 + (sixelX >> 3)] |= (1 << (7 - ( sixelX & 7 )));
-                    }
-                    else {
-                      image[( ( ( sixelY + sixel_i) & 1 ) ? 0x2000 : 0 ) + ( ( sixelY + sixel_i ) >> 1) * 80 + (sixelX >> 3)] |= (1 << (7 - ( sixelX & 7 )));
-                    }
-                  }
-                  else if ( videoMode == MCGA256 ) {
-                    image[(sixelY + sixel_i) * 320 + sixelX] = sixel_current_color;
-                  }
-                  else{
-                    image[( ( ( sixelY + sixel_i) & 1 ) ? 0x2000 : 0 ) + ( ( sixelY + sixel_i ) >> 1) * 80 + (sixelX >> 2)] |= ((sixel_current_color & 3) << (6 - ((sixelX & 3) << 1)));
-                  }
-                }
-                sixel_vertical_mask <<= 1;
-              }
-              sixelX += 1;
-              if ( sixelX >= hmax ) {
-                sixelX = hmax - 1;
-              }
-            }
-            else {
-              if ( sixelX + sixel_repeat_count >= hmax ) {
-                sixel_repeat_count = hmax - ( 1 + sixelX );
-              }
-              for (sixel_i = 0; sixel_i < 6; sixel_i++) {
-                if ((sixel_bits & sixel_vertical_mask) != 0) {
-                  sixel_c = sixel_vertical_mask << 1;
-                  for (sixel_n = 1; (sixel_i + sixel_n) < 6; sixel_n++) {
-                    if ((sixel_bits & sixel_c) == 0) {
-                      break;
-                    }
-                    sixel_c <<= 1;
-                  }
-                  for (int16_t y = sixelY + sixel_i; y < sixelY + sixel_i + sixel_n; ++y) {
-                    if ( videoMode == Mono ) {
-                      for (int16_t r = 0; r < sixel_repeat_count; ++r) {
-                        if ( useMcga ){
-                          image[y * 80 + ((sixelX + r) >> 3)] |= (1 << (7 - ( (sixelX + r) & 7 )));
-                        }
-                        else {
-                          image[( ( y & 1 ) ? 0x2000 : 0 ) + (y >> 1) * 80 + ((sixelX + r) >> 3)] |= (1 << (7 - ( (sixelX + r) & 7 )));
-                        }
-                      }
-                    }
-                    else if ( videoMode == MCGA256 ){
-                      memset(image + (size_t)y * 320 + (size_t)sixelX, sixel_current_color, (size_t)sixel_repeat_count);
-                    }
-                    else{
-                      for (int16_t r = 0; r < sixel_repeat_count; ++r) {
-                        image[( ( y & 1 ) ? 0x2000 : 0 ) + (y >> 1) * 80 + ((sixelX + r) >> 2)] |= ((sixel_current_color & 3) << (6 - (((sixelX + r) & 3) << 1)));
-                      }
-                    }
-                  }
-                  sixel_i += (sixel_n - 1);
-                  sixel_vertical_mask <<= (sixel_n - 1);
-                }
-                sixel_vertical_mask <<= 1;
-              }
-              sixelX += sixel_repeat_count;
-            }
+            (this->*sixelFunc)();
           }
           sixel_repeat_count = 1;
         }
@@ -487,6 +432,168 @@ uint16_t Graphics::processDCSSeq( uint8_t *buffer, uint16_t len ) {
     i++;
   }
   return i;
+}
+
+void Graphics::sixel_Mono_Mcga() {
+  sixel_vertical_mask = 0x01;
+  if (sixel_repeat_count <= 1) {
+    for (sixel_i = 0; sixel_i < 6; sixel_i++) {
+      if ((sixel_bits & sixel_vertical_mask) != 0) {
+        image[(sixelY + sixel_i) * 80 + (sixelX >> 3)] |= (1 << (7 - ( sixelX & 7 )));
+      }
+      sixel_vertical_mask <<= 1;
+    }
+    sixelX += 1;
+    if ( sixelX >= hmax ) {
+      sixelX = hmax - 1;
+    }
+  }
+  else {
+    if ( sixelX + sixel_repeat_count >= hmax ) {
+      sixel_repeat_count = hmax - ( 1 + sixelX );
+    }
+    for (sixel_i = 0; sixel_i < 6; sixel_i++) {
+      if ((sixel_bits & sixel_vertical_mask) != 0) {
+        sixel_c = sixel_vertical_mask << 1;
+        for (sixel_n = 1; (sixel_i + sixel_n) < 6; sixel_n++) {
+          if ((sixel_bits & sixel_c) == 0) {
+            break;
+          }
+          sixel_c <<= 1;
+        }
+        for (int16_t y = sixelY + sixel_i; y < sixelY + sixel_i + sixel_n; ++y) {
+          for (int16_t r = 0; r < sixel_repeat_count; ++r) {
+            image[y * 80 + ((sixelX + r) >> 3)] |= (1 << (7 - ( (sixelX + r) & 7 )));
+          }
+        }
+        sixel_i += (sixel_n - 1);
+        sixel_vertical_mask <<= (sixel_n - 1);
+      }
+      sixel_vertical_mask <<= 1;
+    }
+    sixelX += sixel_repeat_count;
+  }
+}
+
+void Graphics::sixel_Mono_Cga() {
+  sixel_vertical_mask = 0x01;
+  if (sixel_repeat_count <= 1) {
+    for (sixel_i = 0; sixel_i < 6; sixel_i++) {
+      if ((sixel_bits & sixel_vertical_mask) != 0) {
+        image[( ( ( sixelY + sixel_i) & 1 ) ? 0x2000 : 0 ) + ( ( sixelY + sixel_i ) >> 1) * 80 + (sixelX >> 3)] |= (1 << (7 - ( sixelX & 7 )));
+      }
+      sixel_vertical_mask <<= 1;
+    }
+    sixelX += 1;
+    if ( sixelX >= hmax ) {
+      sixelX = hmax - 1;
+    }
+  }
+  else {
+    if ( sixelX + sixel_repeat_count >= hmax ) {
+      sixel_repeat_count = hmax - ( 1 + sixelX );
+    }
+    for (sixel_i = 0; sixel_i < 6; sixel_i++) {
+      if ((sixel_bits & sixel_vertical_mask) != 0) {
+        sixel_c = sixel_vertical_mask << 1;
+        for (sixel_n = 1; (sixel_i + sixel_n) < 6; sixel_n++) {
+          if ((sixel_bits & sixel_c) == 0) {
+            break;
+          }
+          sixel_c <<= 1;
+        }
+        for (int16_t y = sixelY + sixel_i; y < sixelY + sixel_i + sixel_n; ++y) {
+          for (int16_t r = 0; r < sixel_repeat_count; ++r) {
+            image[( ( y & 1 ) ? 0x2000 : 0 ) + (y >> 1) * 80 + ((sixelX + r) >> 3)] |= (1 << (7 - ( (sixelX + r) & 7 )));
+          }
+        }
+        sixel_i += (sixel_n - 1);
+        sixel_vertical_mask <<= (sixel_n - 1);
+      }
+      sixel_vertical_mask <<= 1;
+    }
+    sixelX += sixel_repeat_count;
+  }
+}
+
+void Graphics::sixel_Mcga256() {
+  sixel_vertical_mask = 0x01;
+  if (sixel_repeat_count <= 1) {
+    for (sixel_i = 0; sixel_i < 6; sixel_i++) {
+      if ((sixel_bits & sixel_vertical_mask) != 0) {
+        image[(sixelY + sixel_i) * 320 + sixelX] = sixel_current_color;
+      }
+      sixel_vertical_mask <<= 1;
+    }
+    sixelX += 1;
+    if ( sixelX >= hmax ) {
+      sixelX = hmax - 1;
+    }
+  }
+  else {
+    if ( sixelX + sixel_repeat_count >= hmax ) {
+      sixel_repeat_count = hmax - ( 1 + sixelX );
+    }
+    for (sixel_i = 0; sixel_i < 6; sixel_i++) {
+      if ((sixel_bits & sixel_vertical_mask) != 0) {
+        sixel_c = sixel_vertical_mask << 1;
+        for (sixel_n = 1; (sixel_i + sixel_n) < 6; sixel_n++) {
+          if ((sixel_bits & sixel_c) == 0) {
+            break;
+          }
+          sixel_c <<= 1;
+        }
+        for (int16_t y = sixelY + sixel_i; y < sixelY + sixel_i + sixel_n; ++y) {
+          memset(image + (size_t)y * 320 + (size_t)sixelX, sixel_current_color, (size_t)sixel_repeat_count);
+        }
+        sixel_i += (sixel_n - 1);
+        sixel_vertical_mask <<= (sixel_n - 1);
+      }
+      sixel_vertical_mask <<= 1;
+    }
+    sixelX += sixel_repeat_count;
+  }
+}
+
+void Graphics::sixel_Cga() {
+  sixel_vertical_mask = 0x01;
+  if (sixel_repeat_count <= 1) {
+    for (sixel_i = 0; sixel_i < 6; sixel_i++) {
+      if ((sixel_bits & sixel_vertical_mask) != 0) {
+        image[( ( ( sixelY + sixel_i) & 1 ) ? 0x2000 : 0 ) + ( ( sixelY + sixel_i ) >> 1) * 80 + (sixelX >> 2)] |= ((sixel_current_color & 3) << (6 - ((sixelX & 3) << 1)));
+      }
+      sixel_vertical_mask <<= 1;
+    }
+    sixelX += 1;
+    if ( sixelX >= hmax ) {
+      sixelX = hmax - 1;
+    }
+  }
+  else {
+    if ( sixelX + sixel_repeat_count >= hmax ) {
+      sixel_repeat_count = hmax - ( 1 + sixelX );
+    }
+    for (sixel_i = 0; sixel_i < 6; sixel_i++) {
+      if ((sixel_bits & sixel_vertical_mask) != 0) {
+        sixel_c = sixel_vertical_mask << 1;
+        for (sixel_n = 1; (sixel_i + sixel_n) < 6; sixel_n++) {
+          if ((sixel_bits & sixel_c) == 0) {
+            break;
+          }
+          sixel_c <<= 1;
+        }
+        for (int16_t y = sixelY + sixel_i; y < sixelY + sixel_i + sixel_n; ++y) {
+          for (int16_t r = 0; r < sixel_repeat_count; ++r) {
+            image[( ( y & 1 ) ? 0x2000 : 0 ) + (y >> 1) * 80 + ((sixelX + r) >> 2)] |= ((sixel_current_color & 3) << (6 - (((sixelX + r) & 3) << 1)));
+          }
+        }
+        sixel_i += (sixel_n - 1);
+        sixel_vertical_mask <<= (sixel_n - 1);
+      }
+      sixel_vertical_mask <<= 1;
+    }
+    sixelX += sixel_repeat_count;
+  }
 }
 
 void Graphics::showImage() {
