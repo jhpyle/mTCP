@@ -39,6 +39,7 @@
    2015-04-10: Add preferred nameserver support.
    2019-09-02: Rewrite dumpBytes so it doesn't call fwrite 17x per
                line of output.
+   2020-06-13: Alternate code page support.
 
 */
 
@@ -492,7 +493,7 @@ int8_t Utils::parseEnv( void ) {
     }
 
   }
-    
+
 
   #ifdef COMPILE_DNS
   if ( Preferred_nameserver_set ) {
@@ -657,7 +658,49 @@ int8_t Utils::getAppValue( const char *key, char *val, uint16_t valBufLen ) {
   return 1;
 }
 
+int16_t Utils::getUtfValues( char *codePage, utfTrans *transTable, int mode ) {
 
+  if ( fseek( CfgFile, 0, 0 ) ) return -1;
+
+  int linesInFile = 0;
+  int16_t utfLines = 0;
+  long value;
+
+  while ( !feof( CfgFile ) ) {
+
+    linesInFile++;
+
+    if ( getLine( CfgFile, true, lineBuffer, UTILS_LINEBUFFER_LEN, linesInFile ) ) {
+      break;
+    }
+
+    rtrim( lineBuffer );
+
+    char *nextTokenPtr = getNextToken( lineBuffer, parmName, UTILS_PARAMETER_LEN );
+
+    if ( (nextTokenPtr == NULL) || (stricmp( parmName, "TELNET_UTF" ) != 0) ) {
+      continue;
+    }
+    nextTokenPtr = getNextToken( nextTokenPtr, parmName, UTILS_PARAMETER_LEN );
+    if ( nextTokenPtr == NULL || stricmp( parmName, codePage ) != 0 ) {
+      continue;
+    }
+    if ( mode == 1 ) {
+      nextTokenPtr = getNextToken( nextTokenPtr, parmName, UTILS_PARAMETER_LEN );
+      if ( nextTokenPtr == NULL || sscanf( parmName, "%lx", &value ) == 0 ) {
+        continue;
+      }
+      transTable[utfLines].utfChar = value;
+      nextTokenPtr = getNextToken( nextTokenPtr, parmName, UTILS_PARAMETER_LEN );
+      if ( sscanf( parmName, "%lx", &value ) == 0 ) {
+        continue;
+      }
+      transTable[utfLines].screenChar = value;
+    }
+    utfLines++;
+  }
+  return utfLines;
+}
 
 
 // Utils::initStack
@@ -737,7 +780,7 @@ int8_t Utils::initStack( uint8_t tcpSockets,
     fprintf( stderr, InitErrorMsg, "EtherTypes" );
     return -1;
   }
-    
+
 
 
   // We want this to appear if any type of tracing is turned on.  The normal
@@ -1172,7 +1215,3 @@ char *Utils::getNextToken( char *input, char *target, uint16_t bufLen ) {
 
   return &input[i];
 }
-
-
-
-

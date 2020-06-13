@@ -33,6 +33,7 @@
    2014-05-18: Add static assert macro
    2015-01-17: Break out the inline utils and tracing into new files
    2015-01-18: Move Ctrl-Break and Ctrl-C initialization to initStack
+   2020-06-13: Alternate code page support.
 
 */
 
@@ -165,6 +166,12 @@ extern uint8_t mTCP_releaseTimesliceEnabled;
 }
 
 
+typedef struct {
+  uint16_t utfChar;
+  uint8_t  screenChar;
+  uint8_t  padChar;
+} utfTrans;
+
 
 
 //-----------------------------------------------------------------------------
@@ -197,6 +204,7 @@ class Utils {
     static FILE    *openCfgFile( void );
     static void     closeCfgFile( void );
     static int8_t   getAppValue( const char *target, char *val, uint16_t valBufLen );
+    static int16_t  getUtfValues( char *codePage, utfTrans *transTable, int mode );
 
     // Configuration file related, but basically not for end-user usage.
     static int      getLine( FILE *inputFile, bool removeNewline, char *buffer, int bufferLen, int lineNumber );
@@ -269,6 +277,5 @@ extern const char Parm_Netmask[];
 extern const char Parm_Nameserver[];
 extern const char Parm_Nameserver_preferred[];
 extern const char Parm_Mtu[];
-
 
 #endif

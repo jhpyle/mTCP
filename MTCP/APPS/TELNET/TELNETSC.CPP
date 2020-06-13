@@ -33,7 +33,7 @@
    2018-10-27: Add code to prevent CGA snow
    2020-05-17: Mouse and Unicode support.
    2020-06-07: Fixed bugs with selection and made more efficient.
-
+   2020-06-13: Alternate code page support.
 */
 
 
@@ -756,187 +756,21 @@ void Screen::add( char *buf, uint16_t len ) {
     uint8_t charType = UTF8Decode( (uint8_t *)(buf + i), &utfcode );
 
     uint8_t c;
-    bool unspecial = true;
-    if (charType == 1){
+    if (charType == 1) {
       c = buf[i];
     }
-    else{
+    else {
       i += ( charType - 1 );
-      switch (utfcode){
-      case 0x263a: { c = 0x01; break; }
-      case 0x263b: { c = 0x02; break; }
-      case 0x2665: { c = 0x03; break; }
-      case 0x2666: { c = 0x04; break; }
-      case 0x2663: { c = 0x05; break; }
-      case 0x2660: { c = 0x06; break; }
-      case 0x2022: { c = 0x07; unspecial = false; break; }
-      case 0x25d8: { c = 0x08; unspecial = false; break; }
-      case 0x25cb: { c = 0x09; unspecial = false; break; }
-      case 0x25d9: { c = 0x0a; unspecial = false; break; }
-      case 0x2642: { c = 0x0b; break; }
-      case 0x2640: { c = 0x0c; unspecial = false; break; }
-      case 0x266a: { c = 0x0d; break; }
-      case 0x266b: { c = 0x0e; break; }
-      case 0x263c: { c = 0x0f; break; }
-      case 0x25ba: { c = 0x10; break; }
-      case 0x25c4: { c = 0x11; break; }
-      case 0x2195: { c = 0x12; break; }
-      case 0x2039: { c = 0x3c; break; }
-      case 0x203a: { c = 0x3e; break; }
-      case 0x203c: { c = 0x13; break; }
-      case 0x00b6: { c = 0x14; break; }
-      case 0x00a7: { c = 0x15; break; }
-      case 0x25ac: { c = 0x16; break; }
-      case 0x21ab: { c = 0x17; break; }
-      case 0x2191: { c = 0x18; break; }
-      case 0x2193: { c = 0x19; break; }
-      case 0x2192: { c = 0x1a; break; }
-      case 0x2190: { c = 0x1b; break; }
-      case 0x221f: { c = 0x1c; break; }
-      case 0x2194: { c = 0x1d; break; }
-      case 0x25b2: { c = 0x1e; break; }
-      case 0x25bc: { c = 0x1f; break; }
-      case 0x201c: { c = 0x22; break; }
-      case 0x201d: { c = 0x22; break; }
-      case 0x2011: { c = 0x2d; break; }
-      case 0x2012: { c = 0x2d; break; }
-      case 0x2013: { c = 0x2d; break; }
-      case 0x2014: { c = 0x2d; break; }
-      case 0x2019: { c = 0x27; break; }
-      case 0x00ae: { c = 0x52; break; }
-      case 0x2018: { c = 0x60; break; }
-      case 0x00a9: { c = 0x63; break; }
-      case 0x00d7: { c = 0x78; break; }
-      case 0x2302: { c = 0x7f; unspecial = false; break; }
-      case 0x00c7: { c = 0x80; break; }
-      case 0x00fc: { c = 0x81; break; }
-      case 0x00e9: { c = 0x82; break; }
-      case 0x00e2: { c = 0x83; break; }
-      case 0x00e4: { c = 0x84; break; }
-      case 0x00e0: { c = 0x85; break; }
-      case 0x00e5: { c = 0x86; break; }
-      case 0x00e7: { c = 0x87; break; }
-      case 0x00ea: { c = 0x88; break; }
-      case 0x00eb: { c = 0x89; break; }
-      case 0x00e8: { c = 0x8a; break; }
-      case 0x00ef: { c = 0x8b; break; }
-      case 0x00ee: { c = 0x8c; break; }
-      case 0x00ec: { c = 0x8d; break; }
-      case 0x00c4: { c = 0x8e; break; }
-      case 0x00c5: { c = 0x8f; break; }
-      case 0x00c9: { c = 0x90; break; }
-      case 0x00e6: { c = 0x91; break; }
-      case 0x00c6: { c = 0x92; break; }
-      case 0x00f4: { c = 0x93; break; }
-      case 0x00f6: { c = 0x94; break; }
-      case 0x00f2: { c = 0x95; break; }
-      case 0x00fb: { c = 0x96; break; }
-      case 0x00f9: { c = 0x97; break; }
-      case 0x00ff: { c = 0x98; break; }
-      case 0x00d6: { c = 0x99; break; }
-      case 0x00dc: { c = 0x9a; break; }
-      case 0x00a2: { c = 0x9b; break; }
-      case 0x00a3: { c = 0x9c; break; }
-      case 0x00a5: { c = 0x9d; break; }
-      case 0x20a7: { c = 0x9e; break; }
-      case 0x0192: { c = 0x9f; break; }
-      case 0x00e1: { c = 0xa0; break; }
-      case 0x00ed: { c = 0xa1; break; }
-      case 0x00f3: { c = 0xa2; break; }
-      case 0x00fa: { c = 0xa3; break; }
-      case 0x00f1: { c = 0xa4; break; }
-      case 0x00d1: { c = 0xa5; break; }
-      case 0x00aa: { c = 0xa6; break; }
-      case 0x00ba: { c = 0xa7; break; }
-      case 0x00bf: { c = 0xa8; break; }
-      case 0x2310: { c = 0xa9; break; }
-      case 0x00ac: { c = 0xaa; break; }
-      case 0x00bd: { c = 0xab; break; }
-      case 0x00bc: { c = 0xac; break; }
-      case 0x00a1: { c = 0xad; break; }
-      case 0x00ab: { c = 0xae; break; }
-      case 0x00bb: { c = 0xaf; break; }
-      case 0x2591: { c = 0xb0; break; }
-      case 0x2592: { c = 0xb1; break; }
-      case 0x2593: { c = 0xb2; break; }
-      case 0x2502: { c = 0xb3; break; }
-      case 0x2524: { c = 0xb4; break; }
-      case 0x2561: { c = 0xb5; break; }
-      case 0x2562: { c = 0xb6; break; }
-      case 0x2556: { c = 0xb7; break; }
-      case 0x2555: { c = 0xb8; break; }
-      case 0x2563: { c = 0xb9; break; }
-      case 0x2551: { c = 0xba; break; }
-      case 0x2557: { c = 0xbb; break; }
-      case 0x255d: { c = 0xbc; break; }
-      case 0x255c: { c = 0xbd; break; }
-      case 0x255b: { c = 0xbe; break; }
-      case 0x2510: { c = 0xbf; break; }
-      case 0x2514: { c = 0xc0; break; }
-      case 0x2534: { c = 0xc1; break; }
-      case 0x252c: { c = 0xc2; break; }
-      case 0x251c: { c = 0xc3; break; }
-      case 0x2500: { c = 0xc4; break; }
-      case 0x253c: { c = 0xc5; break; }
-      case 0x255e: { c = 0xc6; break; }
-      case 0x255f: { c = 0xc7; break; }
-      case 0x255a: { c = 0xc8; break; }
-      case 0x2554: { c = 0xc9; break; }
-      case 0x2569: { c = 0xca; break; }
-      case 0x2566: { c = 0xcb; break; }
-      case 0x2560: { c = 0xcc; break; }
-      case 0x2550: { c = 0xcd; break; }
-      case 0x256c: { c = 0xce; break; }
-      case 0x2567: { c = 0xcf; break; }
-      case 0x2568: { c = 0xd0; break; }
-      case 0x2564: { c = 0xd1; break; }
-      case 0x2565: { c = 0xd2; break; }
-      case 0x2559: { c = 0xd3; break; }
-      case 0x2558: { c = 0xd4; break; }
-      case 0x2552: { c = 0xd5; break; }
-      case 0x2553: { c = 0xd6; break; }
-      case 0x256b: { c = 0xd7; break; }
-      case 0x256a: { c = 0xd8; break; }
-      case 0x2518: { c = 0xd9; break; }
-      case 0x250c: { c = 0xda; break; }
-      case 0x2588: { c = 0xdb; break; }
-      case 0x2584: { c = 0xdc; break; }
-      case 0x258c: { c = 0xdd; break; }
-      case 0x2590: { c = 0xde; break; }
-      case 0x2580: { c = 0xdf; break; }
-      case 0x03b1: { c = 0xe0; break; }
-      case 0x00df: { c = 0xe1; break; }
-      case 0x0393: { c = 0xe2; break; }
-      case 0x03c0: { c = 0xe3; break; }
-      case 0x03a3: { c = 0xe4; break; }
-      case 0x03c3: { c = 0xe5; break; }
-      case 0x00b5: { c = 0xe6; break; }
-      case 0x03c4: { c = 0xe7; break; }
-      case 0x03a6: { c = 0xe8; break; }
-      case 0x0398: { c = 0xe9; break; }
-      case 0x03a9: { c = 0xea; break; }
-      case 0x03b4: { c = 0xeb; break; }
-      case 0x221e: { c = 0xec; break; }
-      case 0x03c6: { c = 0xed; break; }
-      case 0x03b5: { c = 0xee; break; }
-      case 0x2229: { c = 0xef; break; }
-      case 0x2261: { c = 0xf0; break; }
-      case 0x00b1: { c = 0xf1; break; }
-      case 0x2265: { c = 0xf2; break; }
-      case 0x2264: { c = 0xf3; break; }
-      case 0x2320: { c = 0xf4; break; }
-      case 0x2321: { c = 0xf5; break; }
-      case 0x00f7: { c = 0xf6; break; }
-      case 0x2248: { c = 0xf7; break; }
-      case 0x00b0: { c = 0xf8; break; }
-      case 0x2219: { c = 0xf9; break; }
-      case 0x00b7: { c = 0xfa; break; }
-      case 0x221a: { c = 0xfb; break; }
-      case 0x207f: { c = 0xfc; break; }
-      case 0x00b2: { c = 0xfd; break; }
-      case 0x25a0: { c = 0xfe; break; }
-      case 0x00a0: { c = 0xff; break; }
-      default:     { c = 0xa8; break; }
+      int j = 0;
+      while ( 1 ){
+        if ( transTable[j].utfChar == utfcode ){
+          c = transTable[j].screenChar;
+          break;
+        }
+        if ( ++j == transTableCount ) {
+          c = nonPrintable;
+          break;
+        }
       }
     }
 
@@ -944,30 +778,30 @@ void Screen::add( char *buf, uint16_t len ) {
       // Do nothing
     }
 
-    else if ( unspecial && c == '\r' ) { // Carriage Return
+    else if ( charType == 1 && c == '\r' ) { // Carriage Return
       cursor_x = 0;
       overhang = false;
       updateVidBufPtr( );
     }
 
-    else if ( unspecial && c == '\n' ) { // Line Feed
+    else if ( charType == 1 && c == '\n' ) { // Line Feed
       scroll( );
       overhang = false;
       updateVidBufPtr( );
     }
 
-    else if ( unspecial && c == '\a' ) { // Attention/Bell
+    else if ( charType == 1 && c == '\a' ) { // Attention/Bell
       sound(1000); delay(100); nosound( );
     }
 
-    else if ( unspecial && c == '\t' ) { // Tab
+    else if ( charType == 1 && c == '\t' ) { // Tab
       overhang = false;
       uint16_t newCursor_x = (cursor_x + 8) & 0xF8;
       if ( newCursor_x < terminalCols ) cursor_x = newCursor_x;
       updateVidBufPtr( );
     }
 
-    else if ( unspecial && (c == 8 || c == 127) ) { // Backspace or Delete Char
+    else if ( charType == 1 && (c == 8 || c == 127) ) { // Backspace or Delete Char
 
       if ( overhang == true ) {
         overhang = false;

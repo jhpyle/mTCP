@@ -30,6 +30,7 @@
    2015-01-22: Add 132 column support
    2018-10-27: Add code to prevent CGA snow
    2020-05-17: Extended keyboard support
+   2020-06-13: Alternate code page support.
 
 */
 
@@ -40,13 +41,14 @@
 
 #define MAX_SELECTION_SIZE 2000
 #define MAX_SELECTION_SIZE_PLUS 2048
+#define NUMBER_OF_DEFAULT_UTF_TRANSLATIONS 173
 //#define BASE64_BUFFER_SIZE 3000
 
 #include <stdarg.h>
 
 #include "types.h"
 #include "inlines.h"
-
+#include "utils.h"
 
 
 class Screen {
@@ -226,6 +228,11 @@ class Screen {
       bool      pad6;
       bool      pad7;
     } selection;
+
+    utfTrans far *transTable;
+    int      transTableCount;
+    uint8_t  nonPrintable;
+    uint8_t  pad8;
 
   private:
 

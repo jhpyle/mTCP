@@ -77,8 +77,55 @@ be available as part of your DOS system) before running [TELNET.EXE].
 ### Unicode
 
 If UTF-8 characters are received, they are translated if possible to
-[Code Page 437], but if no translation is available, `¿` is printed.
-Translation does take place when sending keys to Telnet.
+one of the 255 characters that can be displayed in text mode.  If no
+translation is available, a default character is printed.  Translation
+does not take place when sending outbound characters.
+
+By default, Unicode characters are translated into [Code Page 437] and
+the default character for an untranslatable Unicode character is `¿`.
+
+Unicode translation can be configured by adding directives to your
+`MTCP.CFG` file such as the following, which will enable [Code Page
+737] instead of [Code Page 437]:
+
+    TELNET_CODEPAGE 737
+    TELNET_UTF_DEFAULT 0xb7
+    TELNET_UTF 737 0x0000 0x00
+    TELNET_UTF 737 0x0001 0x01
+    TELNET_UTF 737 0x0002 0x02
+    TELNET_UTF 737 0x0003 0x03
+    ...
+    TELNET_UTF 737 0x00a0 0xff
+
+There are example configurations in the [`config`] folder for [Code
+Page 737], [Code Page 775], [Code Page 850], [Code Page 852], [Code
+Page 855], [Code Page 857] [Code Page 860], [Code Page 861], [Code
+Page 862], [Code Page 863], [Code Page 864], [Code Page 865], [Code
+Page 866], [Code Page 869], and [Code Page 874].  A file is also
+included for [Code Page 437] in case you want to customize the default
+translation.
+
+You can copy and paste from these files into your MTCP.CFG file.  The
+`TELNET_CODEPAGE` directive selects a code page, and any directives
+beginning with `TELNET_UTF 737` will be used to define the
+translations that are used.  The numbers must be written in
+hexadecimal.  The first number is the Unicode number and the second
+number is the 8-bit number representing the character on the screen.
+
+The `TELNET_UTF_DEFAULT` directive indicates which character should be
+printed if there is no translation for a particular Unicode
+character.  The number must be written in hexadecimal.
+
+If you switch between code pages, you can keep definitions for several
+code pages in your `MTCP.CFG` file and change only the
+`TELNET_CODEPAGE` line when you want to switch among them.
+
+Depending on what applications you use and what content you view, you
+may wish to modify the standard Unicode translations, add additional
+characters, or add additional code pages.
+
+The sample configuration files were created using translation tables
+available on [unicode.org].
 
 ### Graphics
 
@@ -350,3 +397,21 @@ forgot exactly how make works.)  For a final build you should run
 [ggplot2]: https://ggplot2.tidyverse.org/
 [Links]: https://en.wikipedia.org/wiki/Links_(web_browser)
 [Lynx]: https://en.wikipedia.org/wiki/Lynx_(web_browser)
+[unicode.org]: https://www.unicode.org/Public/MAPPINGS/VENDORS/MICSFT/PC/
+[`config`]: https://github.com/jhpyle/mTCP/blob/master/config
+[Code Page 437]: https://en.wikipedia.org/wiki/Code_page_437
+[Code Page 737]: https://en.wikipedia.org/wiki/Code_page_737
+[Code Page 775]: https://en.wikipedia.org/wiki/Code_page_775
+[Code Page 850]: https://en.wikipedia.org/wiki/Code_page_850
+[Code Page 852]: https://en.wikipedia.org/wiki/Code_page_852
+[Code Page 855]: https://en.wikipedia.org/wiki/Code_page_855
+[Code Page 857]: https://en.wikipedia.org/wiki/Code_page_857
+[Code Page 860]: https://en.wikipedia.org/wiki/Code_page_860
+[Code Page 861]: https://en.wikipedia.org/wiki/Code_page_861
+[Code Page 862]: https://en.wikipedia.org/wiki/Code_page_862
+[Code Page 863]: https://en.wikipedia.org/wiki/Code_page_863
+[Code Page 864]: https://en.wikipedia.org/wiki/Code_page_864
+[Code Page 865]: https://en.wikipedia.org/wiki/Code_page_865
+[Code Page 866]: https://en.wikipedia.org/wiki/Code_page_866
+[Code Page 869]: https://en.wikipedia.org/wiki/Code_page_869
+[Code Page 874]: https://en.wikipedia.org/wiki/Code_page_874
