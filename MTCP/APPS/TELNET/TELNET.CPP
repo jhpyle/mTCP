@@ -56,6 +56,9 @@
    2020-05-25: Added Sixel graphics support.
    2020-06-07: Fixed bugs with selection and made graphics more efficient.
    2020-06-13: Alternate code page support.
+   2021-09-21: Added Unicode translation for vowels with macrons, added
+               Hercules Graphics Card support, and changed the cursor to
+               the default cursor.
 
    Todo:
 
@@ -145,6 +148,7 @@ utfTrans defaultTransTable[NUMBER_OF_DEFAULT_UTF_TRANSLATIONS] = {
                                                                   { 0x2666, 0x04 },
                                                                   { 0x2663, 0x05 },
                                                                   { 0x2660, 0x06 },
+                                                                  { 0x25cf, 0x07 },
                                                                   { 0x2022, 0x07 },
                                                                   { 0x25d8, 0x08 },
                                                                   { 0x25cb, 0x09 },
@@ -311,7 +315,22 @@ utfTrans defaultTransTable[NUMBER_OF_DEFAULT_UTF_TRANSLATIONS] = {
                                                                   { 0x207f, 0xfc },
                                                                   { 0x00b2, 0xfd },
                                                                   { 0x25a0, 0xfe },
-                                                                  { 0x00a0, 0xff }
+                                                                  { 0x00a0, 0xff },
+                                                                  { 0x0100, 0x41 },
+                                                                  { 0x0112, 0x45 },
+                                                                  { 0x012a, 0x49 },
+                                                                  { 0x014c, 0x4f },
+                                                                  { 0x016a, 0x55 },
+                                                                  { 0x0101, 0x61 },
+                                                                  { 0x0113, 0x65 },
+                                                                  { 0x012b, 0x69 },
+                                                                  { 0x014d, 0x6f },
+                                                                  { 0x016b, 0x75 },
+                                                                  { 0x2026, 0x5f },
+                                                                  { 0x2630, 0xf0 },
+                                                                  { 0x2033, 0x22 },
+                                                                  { 0x2032, 0x27 },
+                                                                  { 0x2212, 0x2d }
 };
 
 char TermType[TERMTYPE_MAXLEN] = "ANSI";
@@ -928,6 +947,7 @@ int main( int argc, char *argv[] ) {
   }
 
   g.useMcga = true;
+  g.useHercules = false;
   getCfgOpts( );
   if ( Utils::initStack( 1, TCP_SOCKET_RING_SIZE, ctrlBreakHandler, ctrlCHandler ) ) {
     printf( "\nFailed to initialize TCP/IP - exiting\n" );
@@ -948,11 +968,11 @@ int main( int argc, char *argv[] ) {
 
   uint8_t *recvBuffer = (uint8_t *)malloc( RECV_BUF_SIZE );
 
-  if ( (recvBuffer == NULL) || s.init( BackScrollPages, InitWrapMode ) ) {
+  if ( (recvBuffer == NULL) || s.init( BackScrollPages, InitWrapMode, g.useMcga ) ) {
     puts( "\nNot enough memory - exiting\n" );
     shutdown( -1 );
   }
-  if ( !g.useMcga ){
+  if ( !g.useMcga && !g.useHercules ){
     s.preventSnow = true;
   }
 
@@ -2959,6 +2979,14 @@ void getCfgOpts( void ) {
     }
   }
 
+  if ( Utils::getAppValue( "TELNET_HGC", tmp, 10 ) == 0 ) {
+    if ( atoi(tmp) >= 1 ){
+      g.useMcga = false;
+      g.useHercules = true;
+      enable_hercules();
+    }
+  }
+
   s.nonPrintable = 0xa8;
   if ( Utils::getAppValue( "TELNET_UTF_DEFAULT", tmp, 10 ) == 0 ) {
     sscanf( tmp, "%x", &(s.nonPrintable) );
@@ -3027,6 +3055,9 @@ static void shutdown( int rc ) {
   Utils::endStack( );
   mouse_hide();
   mouse_uninstall();
+  if ( g.useHercules ){
+    disable_hercules();
+  }
   exit( rc );
 }
 
@@ -4184,7 +4215,11 @@ void processAnsiCommand( uint8_t commandLetter ) {
               reverse = bold = blink = bg = 0;
               underline = false;
               fg = 7;
-              setBlockCursor( );
+              if (g.useMcga){
+                setCursorMcga( );
+              } else {
+                setCursor( );
+              }
               break;
             }
 
@@ -4380,7 +4415,11 @@ void processDecPrivateControl( uint8_t commandLetter ) {
         } else if ( parms[i] == 7 ) {
           s.autoWrap = true;
         } else if ( parms[i] == 25 ) {
-          setBlockCursor( );
+          if (g.useMcga){
+            setCursorMcga( );
+          } else {
+            setCursor( );
+          }
         } else if ( parms[i] == 1000 ) {
           mouse.xterm_normal = true;
         } else if ( parms[i] == 1002 ) {
@@ -4495,7 +4534,7 @@ static void processNonCSIEscSeq( uint8_t ch ) {
   } else if ( ch == 'c' ) {
 
     // RIS: Reset to Initial State, full reset
-    s.resetTerminalState( );
+    s.resetTerminalState( g.useMcga );
 
   }
 

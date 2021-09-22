@@ -35,7 +35,7 @@
 #include <bios.h>
 
 #include "keys.h"
-
+#include CFG_H
 
 Key_t getKey( void ) {
 

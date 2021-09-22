@@ -26,6 +26,7 @@
    Changes:
    2020-05-25: Initial release
    2020-06-07: Fixed bugs and made more efficient.
+   2021-09-21: Added Hercules Graphics Card support.
 
 */
 
@@ -53,11 +54,13 @@ void Graphics::reset() {
     sixelY = 0;
     initStage = true;
     sixelStartX = 0;
-    if ( useMcga ){
-      memset(palette, 0, 256*3);
-    }
-    if ( useMcga ){
-      memset(palette, 0, 4*3);
+    if ( !useHercules ){
+      if ( useMcga ){
+        memset(palette, 0, 256*3);
+      }
+      else {
+        memset(palette, 0, 4*3);
+      }
     }
   }
   else{
@@ -197,37 +200,59 @@ uint16_t Graphics::processDCSSeq( uint8_t *buffer, uint16_t len ) {
             sixelInvalid = 2;
             break;
           }
-          if (sixelColors == 0) {
+          if (useHercules) {
+            if (sixelColors != 0) {
+              sixelParseState = SixelIgnore;
+              sixelInvalid = 3;
+              break;
+            }
             videoMode = Mono;
-            hmax = 640;
-            if ( useMcga ) {
-              vmax = 480;
-              sixelFunc = &Graphics::sixel_Mono_Mcga;
-            }
-            else {
-              vmax = 200;
-              sixelFunc = &Graphics::sixel_Mono_Cga;
-            }
+            hmax = 720;
+            vmax = 348;
+            sixelFunc = &Graphics::sixel_Mono_Hercules;
+            clear_hercules();
           }
           else {
-            hmax = 320;
-            vmax = 200;
-            if ( sixelColors == 4 ) {
-              if ( palette[6] == 62 && palette[7] == 19 && palette[8] == 62 ) {
-                videoMode = LightCyanMagenta;
-                sixelFunc = &Graphics::sixel_Cga;
+            if (sixelColors == 0) {
+              videoMode = Mono;
+              hmax = 640;
+              if ( useMcga ) {
+                vmax = 480;
+                sixelFunc = &Graphics::sixel_Mono_Mcga;
               }
-              else if ( palette[6] == 42 && palette[7] == 0 && palette[8] == 42 ) {
-                videoMode = CyanMagenta;
-                sixelFunc = &Graphics::sixel_Cga;
+              else {
+                vmax = 200;
+                sixelFunc = &Graphics::sixel_Mono_Cga;
               }
-              else if ( palette[6] == 62 && palette[7] == 19 && palette[8] == 19 ) {
-                videoMode = LightGreenRed;
-                sixelFunc = &Graphics::sixel_Cga;
-              }
-              else if ( palette[6] == 42 && palette[7] == 0 && palette[8] == 0 ) {
-                videoMode = GreenRed;
-                sixelFunc = &Graphics::sixel_Cga;
+            }
+            else {
+              hmax = 320;
+              vmax = 200;
+              if ( sixelColors == 4 ) {
+                if ( palette[6] == 62 && palette[7] == 19 && palette[8] == 62 ) {
+                  videoMode = LightCyanMagenta;
+                  sixelFunc = &Graphics::sixel_Cga;
+                }
+                else if ( palette[6] == 42 && palette[7] == 0 && palette[8] == 42 ) {
+                  videoMode = CyanMagenta;
+                  sixelFunc = &Graphics::sixel_Cga;
+                }
+                else if ( palette[6] == 62 && palette[7] == 19 && palette[8] == 19 ) {
+                  videoMode = LightGreenRed;
+                  sixelFunc = &Graphics::sixel_Cga;
+                }
+                else if ( palette[6] == 42 && palette[7] == 0 && palette[8] == 0 ) {
+                  videoMode = GreenRed;
+                  sixelFunc = &Graphics::sixel_Cga;
+                }
+                else if ( useMcga ){
+                  videoMode = MCGA256;
+                  sixelFunc = &Graphics::sixel_Mcga256;
+                }
+                else {
+                  videoMode = LightCyanMagenta;
+                  sixelFunc = &Graphics::sixel_Cga;
+                }
               }
               else if ( useMcga ){
                 videoMode = MCGA256;
@@ -238,23 +263,15 @@ uint16_t Graphics::processDCSSeq( uint8_t *buffer, uint16_t len ) {
                 sixelFunc = &Graphics::sixel_Cga;
               }
             }
-            else if ( useMcga ){
-              videoMode = MCGA256;
-              sixelFunc = &Graphics::sixel_Mcga256;
+            if ( videoMode == Mono && useMcga ) {
+              memset(image, 0x00, 64000);
             }
-            else {
-              videoMode = LightCyanMagenta;
-              sixelFunc = &Graphics::sixel_Cga;
+            if ( videoMode == MCGA256 ){
+              memset(image, 0xff, 64000);
             }
-          }
-          if ( videoMode == Mono && useMcga ) {
-            memset(image, 0x00, 64000);
-          }
-          if ( videoMode == MCGA256 ){
-            memset(image, 0xff, 64000);
-          }
-          else{
-            memset(image, 0x00, 16384);
+            else{
+              memset(image, 0x00, 16384);
+            }
           }
           if ( sixelPh > hmax || sixelPv > vmax ) {
             sixelParseState = SixelIgnore;
@@ -269,7 +286,8 @@ uint16_t Graphics::processDCSSeq( uint8_t *buffer, uint16_t len ) {
         }
         if (c >= '?' && c <= '~') {
           sixel_bits = c - '?';
-          if (sixel_bits == 0) {
+          if (sixel_bits == 0){
+          // if (sixel_bits == 0 && !( useHercules && videoMode == Mono)) {
             sixelX += sixel_repeat_count;
             if ( sixelX >= hmax ) {
               sixelX = hmax - 1;
@@ -317,10 +335,10 @@ uint16_t Graphics::processDCSSeq( uint8_t *buffer, uint16_t len ) {
           sixelPan = parms[1];
         }
         if ( parmsFound > 2 && parms[2] > 0 ) {
-          sixelPh = parms[2];
+          sixelPh = parms[2] - 1;
         }
         if ( parmsFound > 3 && parms[3] > 0 ) {
-          sixelPv = parms[3];
+          sixelPv = parms[3] - 1;
         }
         if ( sixelPad <= 0 ) {
           sixelPad = 1;
@@ -461,7 +479,7 @@ void Graphics::sixel_Mono_Mcga() {
           }
           sixel_c <<= 1;
         }
-        for (int16_t y = sixelY + sixel_i; y < sixelY + sixel_i + sixel_n; ++y) {
+        for (int16_t y = sixelY + sixel_i; y < (sixelY + sixel_i + sixel_n); ++y) {
           for (int16_t r = 0; r < sixel_repeat_count; ++r) {
             image[y * 80 + ((sixelX + r) >> 3)] |= (1 << (7 - ( (sixelX + r) & 7 )));
           }
@@ -502,7 +520,7 @@ void Graphics::sixel_Mono_Cga() {
           }
           sixel_c <<= 1;
         }
-        for (int16_t y = sixelY + sixel_i; y < sixelY + sixel_i + sixel_n; ++y) {
+        for (int16_t y = sixelY + sixel_i; y < (sixelY + sixel_i + sixel_n); ++y) {
           for (int16_t r = 0; r < sixel_repeat_count; ++r) {
             image[( ( y & 1 ) ? 0x2000 : 0 ) + (y >> 1) * 80 + ((sixelX + r) >> 3)] |= (1 << (7 - ( (sixelX + r) & 7 )));
           }
@@ -513,6 +531,41 @@ void Graphics::sixel_Mono_Cga() {
       sixel_vertical_mask <<= 1;
     }
     sixelX += sixel_repeat_count;
+  }
+}
+
+void Graphics::sixel_Mono_Hercules() {
+  sixel_vertical_mask = 0x01;
+  if (sixel_repeat_count <= 1) {
+    uint8_t sixel_horizontal_mask = (1 << (7 - ( sixelX % 8 )));
+    for (sixel_i = 0; sixel_i < 6; sixel_i++) {
+      if ((sixel_bits & sixel_vertical_mask) != 0) {
+        image[0x2000 * ((sixelY + sixel_i) % 4) + 90 * ((sixelY + sixel_i) >> 2) + (sixelX >> 3)] |= sixel_horizontal_mask;
+      }
+      sixel_vertical_mask <<= 1;
+    }
+    sixelX += 1;
+  }
+  else {
+    int lightPixel;
+    if ( (sixelX + sixel_repeat_count) >= hmax ) {
+      sixel_repeat_count = hmax - ( 1 + sixelX );
+    }
+    for (sixel_i = 0; sixel_i < 6; sixel_i++) {
+      if ((sixel_bits & sixel_vertical_mask) != 0) {
+        lightPixel = 1;
+      }
+      else{
+        lightPixel = 0;
+      }
+      for (int16_t r = 0; r < sixel_repeat_count; r++) {
+        if (lightPixel == 1){
+          image[0x2000 * ((sixelY + sixel_i) % 4) + 90 * ((sixelY + sixel_i) >> 2) + (( sixelX + r ) >> 3)] |= (1 << (7 - ( (sixelX + r) % 8 )));
+        }
+      }
+      sixel_vertical_mask <<= 1;
+    }
+    sixelX = sixelX + sixel_repeat_count;
   }
 }
 
@@ -543,7 +596,7 @@ void Graphics::sixel_Mcga256() {
           }
           sixel_c <<= 1;
         }
-        for (int16_t y = sixelY + sixel_i; y < sixelY + sixel_i + sixel_n; ++y) {
+        for (int16_t y = sixelY + sixel_i; y < (sixelY + sixel_i + sixel_n); ++y) {
           memset(image + (size_t)y * 320 + (size_t)sixelX, sixel_current_color, (size_t)sixel_repeat_count);
         }
         sixel_i += (sixel_n - 1);
@@ -582,7 +635,7 @@ void Graphics::sixel_Cga() {
           }
           sixel_c <<= 1;
         }
-        for (int16_t y = sixelY + sixel_i; y < sixelY + sixel_i + sixel_n; ++y) {
+        for (int16_t y = sixelY + sixel_i; y < (sixelY + sixel_i + sixel_n); ++y) {
           for (int16_t r = 0; r < sixel_repeat_count; ++r) {
             image[( ( y & 1 ) ? 0x2000 : 0 ) + (y >> 1) * 80 + ((sixelX + r) >> 2)] |= ((sixel_current_color & 3) << (6 - (((sixelX + r) & 3) << 1)));
           }
@@ -599,25 +652,33 @@ void Graphics::sixel_Cga() {
 void Graphics::showImage() {
   uint8_t mode;
   if ( ( !graphicsMode ) || oldVideoMode != videoMode ) {
-    if ( videoMode == Mono ) {
-      if ( useMcga ){
-        mode = 0x11;
-      }
-      else {
-        mode = 0x06;
-      }
+    if ( useHercules ){
+      start_hercules();
     }
     else {
-      if ( videoMode == MCGA256 ){
-        mode = 0x13;
+      if ( videoMode == Mono ) {
+        if ( useMcga ){
+          mode = 0x11;
+        }
+        else {
+          mode = 0x06;
+        }
       }
       else {
-        mode = 0x04;
+        if ( videoMode == MCGA256 ){
+          mode = 0x13;
+        }
+        else {
+          mode = 0x04;
+        }
       }
+      start_graphics(&mode);
     }
-    start_graphics(&mode);
     oldVideoMode = videoMode;
     graphicsMode = true;
+  }
+  if ( useHercules ){
+    return;
   }
   if ( !useMcga ){
     waitForCGARetraceLong( );
@@ -658,25 +719,36 @@ void Graphics::initializeGraphics() {
   graphicsMode = false;
   oldVideoMode = 255;
   sixelReady = false;
-  if ( ( _bios_equiplist() & 0x30 ) == 0x30 ){
-    enabled = false;
-  }
-  else{
+  if ( useHercules ) {
     enabled = true;
-    if ( useMcga ) {
-      bufferLength = 64000;
-      palette = (uint8_t *)malloc( 256*3 );
+    image = (uint8_t far *)MK_FP( SCREENSEGMENT, 0 );
+  }
+  else {
+    if ( ( _bios_equiplist() & 0x30 ) == 0x30 ){
+      enabled = false;
     }
-    else {
-      bufferLength = 16384;
-      palette = (uint8_t *)malloc( 4*3 );
+    else{
+      enabled = true;
+      if ( useMcga ) {
+        bufferLength = 64000;
+        palette = (uint8_t *)malloc( 256*3 );
+      }
+      else if ( !useHercules ) {
+        bufferLength = 16384;
+        palette = (uint8_t *)malloc( 4*3 );
+      }
+      image = (uint8_t *)malloc( bufferLength );
     }
-    image = (uint8_t *)malloc( bufferLength );
   }
 }
 
 void Graphics::returnToTextMode() {
-  stop_graphics();
+  if ( useHercules ) {
+    stop_hercules();
+  }
+  else {
+    stop_graphics();
+  }
   graphicsMode = false;
 }
 

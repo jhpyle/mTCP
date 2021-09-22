@@ -25,6 +25,7 @@
 
    Changes:
    2020-05-25: Initial release
+   2021-09-21: Added Hercules Graphics Card support.
 
 */
 
@@ -38,12 +39,14 @@
 #define LightGreenRed     (3)
 #define MCGA256           (4)
 #define Mono              (5)
+#define SCREENSEGMENT 0xb800
 
 #include <stdarg.h>
 #include <bios.h>
 
 #include "types.h"
 #include "inlines.h"
+#include "utils.h"
 
 #define DCS_ARGS (16)
 
@@ -53,6 +56,11 @@ extern "C" uint16_t cdecl set_mcga_palette( uint8_t far *palette );
 extern "C" uint16_t cdecl write_mcga_graphics( uint8_t far *image );
 extern "C" uint16_t cdecl write_cga_graphics( uint8_t far *image );
 extern "C" uint16_t cdecl stop_graphics( void );
+extern "C" uint16_t cdecl enable_hercules( void );
+extern "C" uint16_t cdecl disable_hercules( void );
+extern "C" uint16_t cdecl start_hercules( void );
+extern "C" uint16_t cdecl clear_hercules( void );
+extern "C" uint16_t cdecl stop_hercules( void );
 
 class Graphics {
 
@@ -61,6 +69,7 @@ public:
   uint16_t processDCSSeq( uint8_t *buffer, uint16_t len );
   void     reset( void );
   void     sixel_Mono_Mcga( void );
+  void     sixel_Mono_Hercules( void );
   void     sixel_Mono_Cga( void );
   void     sixel_Mcga256( void );
   void     sixel_Cga( void );
@@ -75,13 +84,13 @@ public:
   bool     done;
   bool     enabled;
   bool     useMcga;
+  bool     useHercules;
 
   //private:
 
   bool     DCSParamSeen;
   bool     graphicsMode;
   bool     initStage;
-  bool     pad1;
 
   //void     set_hls(int16_t color_index, int16_t hue, int16_t lum, int16_t sat);
   void     set_rgb(int16_t color_index, int16_t r, int16_t g, int16_t b);

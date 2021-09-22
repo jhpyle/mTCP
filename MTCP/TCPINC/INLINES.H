@@ -27,7 +27,8 @@
 
    2015-01-17: Split out from Utils.H with functions consolidated from various
                other places.
-
+   2021-09-21: Changed cursor style to default cursor, depending on whether
+               VGA/MCGA is available.
 */
 
 
@@ -180,17 +181,25 @@ extern void gotoxy( unsigned char col, unsigned char row );
   "push bp"          \
   "mov ah, 2h"       \
   "mov bh, 0h"       \
-  "int 10h"          \ 
+  "int 10h"          \
   "pop bp"           \
   parm [dl] [dh]     \
   modify [ax bh dx];
 
-
-extern void setBlockCursor( void );
-#pragma aux setBlockCursor = \
+extern void setCursorMcga( void );
+#pragma aux setCursorMcga = \
   "push bp"         \
   "mov ah, 1h"      \
-  "mov cx, 0x000Fh" \
+  "mov cx, 0x0E0Fh" \
+  "int 10h"         \
+  "pop bp"          \
+  modify [ah cx];
+
+extern void setCursor( void );
+#pragma aux setCursor = \
+  "push bp"         \
+  "mov ah, 1h"      \
+  "mov cx, 0x0B0Ch" \
   "int 10h"         \
   "pop bp"          \
   modify [ah cx];
@@ -266,4 +275,3 @@ extern void fillUsingWord( void far * target, uint16_t fillWord, uint16_t len );
 
 
 #endif
-

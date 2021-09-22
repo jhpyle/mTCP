@@ -113,7 +113,7 @@ inline static uint8_t UTF8Decode( uint8_t *p, uint16_t *c ) {
 
 
 
-int8_t Screen::init( uint8_t backScrollPages, uint8_t initWrapMode ) {
+int8_t Screen::init( uint8_t backScrollPages, uint8_t initWrapMode, bool useMcga ) {
 
   usingGraphics = false;
 
@@ -185,13 +185,13 @@ int8_t Screen::init( uint8_t backScrollPages, uint8_t initWrapMode ) {
 
   wrapMode = initWrapMode;
 
-  resetTerminalState( );
+  resetTerminalState( useMcga );
 
   return 0;
 }
 
 
-void Screen::resetTerminalState( void ) {
+void Screen::resetTerminalState( bool useMcga ) {
 
   // Clear out the backscroll buffer
 
@@ -220,8 +220,12 @@ void Screen::resetTerminalState( void ) {
 
   clearConsole( );
   gotoxy( 0, 0 );
-  setBlockCursor( );
 
+  if (useMcga){
+    setCursorMcga( );
+  } else {
+    setCursor( );
+  }
 
   // Terminal emulation state
 

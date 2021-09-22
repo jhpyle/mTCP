@@ -1,5 +1,23 @@
 #! /bin/bash
 
+# show
+#
+# A utility for printing image files as Sixel graphics formatted
+# for display within mTCP Telnet.
+#
+# https://github.com/jhpyle/mTCP
+#
+# Depends on:
+#
+# * img2sixel (apt-get install libsixel-bin)
+# * imgsize (apt-get install libimage-size-perl)
+# * streamer (apt-get install streamer) if you use the --me option
+#
+# The CGA palette option (--colors) depends on files cyanmagenta.png,
+# greenred.png, lightgreenred.png, and lightcyanmagenta.png being
+# located in /usr/local/share/sixel unless another directory is
+# indicated in the COLORMAPS variable, defined below.
+
 usage="$(basename "$0") [options] FILE -- show a Sixel image
 
 Options:
@@ -7,31 +25,45 @@ Options:
     --help        show this help text
     --me          show a still image from /dev/video0 instead of FILE
     --mono        use a monochrome image
+    --hercules    indicate that only the Hercules Graphics Card is available
+                  (implies --mono)
     --cga         indicate that only CGA graphics is available
-    --colors MAP  use the color map MAP; choices are GreenRed, LightGreenRed, 
+    --colors MAP  use the color map MAP; choices are GreenRed, LightGreenRed,
                   CyanMagenta, and LightCyanMagenta
-    --nostretch   do not stretch images (useful if displaying in a modern 
+    --nostretch   do not stretch images (useful if displaying in a modern
                   terminal like mlterm)
 
 FILE is the image file you want to show (ignored if --me is used)."
 
-COLORMAPS=/usr/local/share/sixel
-DEFAULTCGACOLORMAP=lightcyanmagenta.png
+COLOR="mcga" # set to "mono" if you want --mono to be the default
+CGA="false" # set to "true" if you want --cga to be the default
+HERCULES="false" # set to "true" if you want --hercules to be the default
+COLORMAPS="/usr/local/share/sixel" # set to the folder where the palette PNG files
+                                   # can be found
+DEFAULTCGACOLORMAP="lightcyanmagenta.png" # set to cyanmagenta.png, greenred.png,
+                                          # lightgreenred.png, or
+                                          # lightcyanmagenta.png
 
-executable=$( which img2sixel )
-if [ ! -x "$executable" ] ; then
+IMG2SIXEL=$( which img2sixel )
+STREAMER=$( which streamer )
+IMGSIZE=$( which imgsize )
+
+if [ ! -x "$IMG2SIXEL" ] ; then
     >&2 echo "Error: img2sixel could not be found.  Try: apt-get install libsixel-bin"
     exit 1
 fi
 
+if [ ! -x "${IMGSIZE}" ] ; then
+    >&2 echo "Error: imgsize could not be found.  Try: apt-get install libimage-size-perl"
+    exit 1
+fi
+
 if [ ! -d "${COLORMAPS}" ]; then
-    >&2 echo "Error: the directory ${COLORMAPS} could not be found."
+    >&2 echo "Error: the directory ${COLORMAPS} could not be found.  This directory needs to contain the files cyanmagenta.png, greenred.png, lightgreenred.png, and lightcyanmagenta.png."
     exit 1
 fi
 
 SPECIAL=none
-COLOR=mcga
-CGA=false
 STRETCH=true
 POSITIONAL=()
 
@@ -46,6 +78,10 @@ case $key in
 	;;
     --mono)
 	COLOR="mono"
+	shift
+	;;
+    --hercules)
+	HERCULES="true"
 	shift
 	;;
     --cga)
@@ -74,18 +110,21 @@ esac
 done
 set -- "${POSITIONAL[@]}" # restore positional parameters
 
+if [ "${HERCULES}" == "true" ]; then
+    COLOR="mono"
+fi
+
 if [ "$SPECIAL" == "me" ]; then
     # Take 24 shots over 1 second in order to give the camera time to
     # apply auto-exposure settings.
-    executable=$( which streamer )
-    if [ ! -x "$executable" ] ; then
+    if [ ! -x "${STREAMER}" ] ; then
 	>&2 echo "Error: streamer not found.  Try: apt-get install streamer"
 	exit 1
     fi
     if [ "${COLOR}" == "mono" ]; then
-	streamer -s 640x480 -t 24 -r 24 -o /tmp/me00.ppm &> /dev/null
+        ${STREAMER} -s 640x480 -t 24 -r 24 -o /tmp/me00.ppm &> /dev/null
     else
-	streamer -s 320x240 -t 24 -r 24 -o /tmp/me00.ppm &> /dev/null
+        ${STREAMER} -s 320x240 -t 24 -r 24 -o /tmp/me00.ppm &> /dev/null
     fi
     IMAGEFILE=/tmp/me23.ppm
 else
@@ -97,19 +136,23 @@ else
     if [ ! -f "${IMAGEFILE}" ]; then
 	>&2 echo "Error: the file ${IMAGEFILE} could not be found"
 	exit 1
-    fi	
+    fi
 fi
 
-parts=(`imgsize -r "$IMAGEFILE"`)
-
-if [ "$COLOR" == "mono" ] && [ "$CGA" == "false" ]; then
+if [ "$COLOR" == "mono" ] && [ "$CGA" == "false" ] && [ "$HERCULES" == "false" ]; then
     STRETCH=false
 fi
+
+parts=(`${IMGSIZE} -r "${IMAGEFILE}"`)
 
 w=${parts[0]}
 if [ "${STRETCH}" == "true" ]; then
     if [ "$COLOR" == "mono" ]; then
-	h=$(( parts[1] * 200 / 480 ))
+        if [ "$HERCULES" == "true" ]; then
+	    h=$(( parts[1] * 348 / 480 ))
+	else
+	    h=$(( parts[1] * 200 / 480 ))
+	fi
     else
 	h=$(( parts[1] * 200 / 240 ))
     fi
@@ -118,20 +161,32 @@ else
 fi
 
 if [ "$COLOR" == "mono" ]; then
-    if (( $w > 640 )); then
-	h=$(( $h * 640 / $w ))
-	w=$(( $w * 640 / $w ))
-    fi
+    if [ "$HERCULES" == "true" ]; then
+	if (( $w > 720 )); then
+	    h=$(( $h * 720 / $w ))
+	    w=$(( $w * 720 / $w ))
+	fi
 
-    if [ "$CGA" == "true" ]; then
-	if (( $h > 200 )); then
-	    w=$(( $w * 200 / $h ))
-	    h=$(( $h * 200 / $h ))
+	if (( $h > 348 )); then
+	    w=$(( $w * 348 / $h ))
+	    h=$(( $h * 348 / $h ))
 	fi
     else
-	if (( $h > 480 )); then
-	    w=$(( $w * 480 / $h ))
-	    h=$(( $h * 480 / $h ))
+	if (( $w > 640 )); then
+	    h=$(( $h * 640 / $w ))
+	    w=$(( $w * 640 / $w ))
+	fi
+
+	if [ "$CGA" == "true" ]; then
+	    if (( $h > 200 )); then
+		w=$(( $w * 200 / $h ))
+		h=$(( $h * 200 / $h ))
+	    fi
+	else
+	    if (( $h > 480 )); then
+		w=$(( $w * 480 / $h ))
+		h=$(( $h * 480 / $h ))
+	    fi
 	fi
     fi
 else
@@ -147,21 +202,23 @@ else
 fi
 
 if [ "$COLOR" == "mono" ]; then
-    img2sixel -e -w $w -h $h $IMAGEFILE
+    ${IMG2SIXEL} -e -w $w -h $h ${IMAGEFILE}
+elif [ "$COLOR" == "hercules" ]; then
+    ${IMG2SIXEL} -e -w $w -h $h ${IMAGEFILE}
 elif [ "$COLOR" == "GreenRed" ]; then
-    img2sixel -w $w -h $h -m "${COLORMAPS}/greenred.png" $IMAGEFILE
+    ${IMG2SIXEL} -w $w -h $h -m "${COLORMAPS}/greenred.png" ${IMAGEFILE}
 elif [ "$COLOR" == "LightGreenRed" ]; then
-    img2sixel -w $w -h $h -m "${COLORMAPS}/lightgreenred.png" $IMAGEFILE
+    ${IMG2SIXEL} -w $w -h $h -m "${COLORMAPS}/lightgreenred.png" ${IMAGEFILE}
 elif [ "$COLOR" == "CyanMagenta" ]; then
-    img2sixel -w $w -h $h -m "${COLORMAPS}/cyanmagenta.png" $IMAGEFILE
+    ${IMG2SIXEL} -w $w -h $h -m "${COLORMAPS}/cyanmagenta.png" ${IMAGEFILE}
 elif [ "$COLOR" == "LightCyanMagenta" ]; then
-    img2sixel -w $w -h $h -m "${COLORMAPS}/lightcyanmagenta.png" $IMAGEFILE
+    ${IMG2SIXEL} -w $w -h $h -m "${COLORMAPS}/lightcyanmagenta.png" ${IMAGEFILE}
 elif [ "$CGA" == "true" ]; then
-    img2sixel -w $w -h $h -m "${COLORMAPS}/${DEFAULTCGACOLORMAP}" $IMAGEFILE
+    ${IMG2SIXEL} -w $w -h $h -m "${COLORMAPS}/${DEFAULTCGACOLORMAP}" ${IMAGEFILE}
 else
-    img2sixel -w $w -h $h -t rgb -p 255 $IMAGEFILE
+    ${IMG2SIXEL} -w $w -h $h -t rgb -p 255 ${IMAGEFILE}
 fi
 
 if [ "$SPECIAL" == "me" ]; then
     rm -f /tmp/me??.ppm
-fi	
+fi

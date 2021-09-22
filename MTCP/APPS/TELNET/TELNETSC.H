@@ -41,7 +41,7 @@
 
 #define MAX_SELECTION_SIZE 2000
 #define MAX_SELECTION_SIZE_PLUS 2048
-#define NUMBER_OF_DEFAULT_UTF_TRANSLATIONS 173
+#define NUMBER_OF_DEFAULT_UTF_TRANSLATIONS 189
 //#define BASE64_BUFFER_SIZE 3000
 
 #include <stdarg.h>
@@ -55,7 +55,7 @@ class Screen {
 
   public:
 
-    int8_t init( uint8_t backScrollPages, uint8_t initWrapMode );
+    int8_t init( uint8_t backScrollPages, uint8_t initWrapMode, bool useMcga );
 
 
     // Primitives for writing on the physical screen.
@@ -177,7 +177,7 @@ class Screen {
     void saveCursor( void );
     void restoreCursor( void );
 
-    void resetTerminalState( void );
+    void resetTerminalState( bool useMcga );
 
 
 

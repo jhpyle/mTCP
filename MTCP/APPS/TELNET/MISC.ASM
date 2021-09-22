@@ -26,7 +26,7 @@
 ;  2020-05-17: Initial release
 ;  2020-05-25: Renamed from mouse.asm, now includes graphics related functions
 ;  2020-06-07: Fixed bug with CGA palette function
-
+;  2021-09-21: Added support for Hercules Graphics Card
 .8086
 
 
@@ -38,6 +38,12 @@ LUP equ 4
 RUP equ 8
 MDOWN equ 16
 MUP equ 32
+INDEX_REG equ 0x03B4
+DATA_REG equ 0x03B5
+DISPLAY_CTL equ 0x03B8
+CONFIG_SW equ 0x03BF
+VIDEO_SEG equ 0xB800		; address of second page
+VIDEO_SIZE equ 0x4000		; number of words in the 32k page
 
 ifdef __SMALL__
   ; near code, near data
@@ -117,24 +123,21 @@ old_buttons	dw -1
 old_row		dw -1
 old_col  	dw -1
 
+gtable		db 0x35, 0x2D, 0x2E, 0x07, 0x5B, 0x02, 0x57, 0x57, 0x02, 0x03, 0x00, 0x00
+ttable		db 0x61, 0x50, 0x52, 0x0F, 0x19, 0x06, 0x19, 0x19, 0x02, 0x0D, 0x0B, 0x0C
+
 ;; extern  "C", MouseMoveDetected:byte
 
 public _ibm_mouse_init
 
 _ibm_mouse_init proc far
 
-	push    bp
-	mov     bp,sp
-
-	push    ds
-	push    si
+	push    bx
 
 	mov     ax, 0
 	int	0x33
 
-	pop     si
-	pop     ds
-	pop     bp
+	pop     bx
 	ret
 
 _ibm_mouse_init endp
@@ -143,18 +146,8 @@ public _ibm_mouse_show
 
 _ibm_mouse_show proc far
 
-	push    bp
-	mov     bp,sp
-
-	push    ds
-	push    si
-
 	mov     ax, 1
 	int	0x33
-
-	pop     si
-	pop     ds
-	pop     bp
 	ret
 
 _ibm_mouse_show endp
@@ -163,18 +156,8 @@ public _ibm_mouse_hide
 
 _ibm_mouse_hide proc far
 
-	push    bp
-	mov     bp,sp
-
-	push    ds
-	push    si
-
 	mov     ax, 2
 	int	0x33
-
-	pop     si
-	pop     ds
-	pop     bp
 	ret
 
 _ibm_mouse_hide endp
@@ -214,6 +197,9 @@ _ibm_mouse_get_time proc far
 
 	push    ds
 	push    si
+	push    di
+	push    cx
+	push    dx
 
 	mov	ah, 0
 	int	1ah		; cx and dx now have the time
@@ -221,6 +207,9 @@ _ibm_mouse_get_time proc far
 	mov     di, [bp+X]
 	mov     [di+2], cx
 	mov     [di], dx
+	pop     dx
+	pop     cx
+	pop     di
 	pop     si
 	pop     ds
 	pop     bp
@@ -234,6 +223,11 @@ _ibm_mouse_install proc far
 
 	push	es
 	push	ds
+	push    bx
+	push	cx
+	push    dx
+	push    di
+	push    si
 
 	;; mov 	dl, 41h
 	;; mov 	ah, 2
@@ -256,6 +250,11 @@ _ibm_mouse_install proc far
 	mov     oldVectorES, es
 	mov     oldVectorDX, dx
 
+	pop     si
+	pop     di
+	pop	dx
+	pop     cx
+	pop	bx
 	pop     ds
 	pop     es
 	ret
@@ -268,6 +267,11 @@ _ibm_mouse_uninstall proc far
 
 	push	es
 	push	ds
+	push    bx
+	push    cx
+	push    dx
+	push    di
+	push    si
 
 	mov 	ax,14h
 	push	cs
@@ -280,6 +284,11 @@ _ibm_mouse_uninstall proc far
 	sub     ax, ax
 	int     33h
 
+	pop     si
+	pop     di
+	pop     dx
+	pop	cx
+	pop     bx
 	pop     ds
 	pop     es
 	ret
@@ -310,6 +319,12 @@ _ibm_mouse_uninstall endp
 
 _ibm_mouse_handler proc far
 	push 	es
+	push 	ds
+	push    ax
+	push    bx
+	push    cx
+	push    dx
+	push    di
 	push    cs
 	pop     ds
 	mov 	_mouse_changed, 1
@@ -370,7 +385,13 @@ _ibm_mouse_handler proc far
 	jmp	@@continue
 @@overflow:
 @@continue:
-	pop es
+	pop 	di
+	pop 	dx
+	pop 	cx
+	pop 	bx
+	pop 	ax
+	pop 	ds
+	pop 	es
 	ret
 
 _ibm_mouse_handler endp
@@ -382,9 +403,11 @@ _start_graphics proc far
 
 	push    bp
 	mov     bp,sp
-
 	push    ds
 	push    si
+
+	push    cs 		;data segment is this segment
+	pop     ds
 
 	lds     si, [bp+X]
 	mov     al, [ds:si]
@@ -398,6 +421,150 @@ _start_graphics proc far
 
 _start_graphics endp
 
+setmd proc near
+
+	push    bp
+	push    ds
+	push    es
+	push    ax
+	mov     dx, DISPLAY_CTL 	; set mode and turn screen off
+	out     dx, al
+	mov     ax, ds		; initialize registers in the 6845 for the appropriate mode
+	mov     es, ax
+	mov     dx, INDEX_REG
+	mov     cx, 12
+	xor     ah, ah
+	cld
+parms:	mov     al, ah
+	out     dx, al
+	inc     dx
+	lodsb
+	out     dx, al
+	inc     ah
+	dec     dx
+	loop    parms
+
+	;; write same value to the control port as initially, but this time turn on the screen
+	mov     dx, DISPLAY_CTL
+	pop     ax
+	add     al, 8
+	out     dx, al
+	pop     es
+	pop     ds
+	pop	bp
+	ret
+
+setmd endp
+
+public _enable_hercules
+
+_enable_hercules proc far
+
+	push    dx
+	mov 	al, 3
+	mov	dx, CONFIG_SW
+	out	dx, al
+	pop	dx
+	ret
+
+_enable_hercules endp
+
+public _disable_hercules
+
+_disable_hercules proc far
+
+	push    dx
+	mov 	al, 0
+	mov	dx, CONFIG_SW
+	out	dx, al
+	pop	dx
+	ret
+
+_disable_hercules endp
+
+public _clear_hercules
+
+_clear_hercules proc far
+
+	push    bp
+	push 	es
+	push 	ds
+	push    di
+	push    cx
+
+	mov     cx, VIDEO_SIZE
+	mov     ax, VIDEO_SEG
+	cld
+	mov     es, ax
+	xor     di, di
+	mov     ax, 0
+	rep     stosw
+
+	pop	cx
+	pop     di
+	pop	ds
+	pop	es
+	pop	bp
+	ret
+
+_clear_hercules endp
+
+public _start_hercules
+
+_start_hercules proc far
+
+	push    bp
+	push 	es
+	push 	ds
+	push    si
+	push    dx
+	push    cx
+
+	push    cs
+	pop     ds
+
+	mov 	al, 0x82
+	lea	si, gtable
+	call	setmd
+
+	pop     cx
+	pop     dx
+	pop     si
+	pop     ds
+	pop     es
+	pop	bp
+	ret
+
+_start_hercules endp
+
+public _stop_hercules
+
+_stop_hercules proc far
+
+	push    bp
+	push    es
+	push    ds
+	push    si
+	push    dx
+	push    cx
+
+	push    cs
+	pop     ds
+
+	mov	al, 0x20
+	lea	si, ttable
+	call	setmd
+
+	pop     cx
+	pop     dx
+	pop     si
+	pop     ds
+	pop     es
+	pop	bp
+	ret
+
+_stop_hercules endp
+
 public _set_cga_palette
 
 _set_cga_palette proc far
@@ -407,6 +574,7 @@ _set_cga_palette proc far
 
 	push    ds
 	push    si
+	push	bx
 
 	lds     si, [bp+X]
 	mov     bl, [ds:si]
@@ -419,6 +587,7 @@ _set_cga_palette proc far
 	mov     bl, [ds:si]
 	int 	10h
 
+	pop     bx
 	pop     si
 	pop     ds
 	pop     bp
@@ -435,6 +604,8 @@ _set_mcga_palette proc far
 
 	push    ds
 	push    si
+	push    cx
+	push    dx
 
 	cli
 	mov     dx, 3c8h
@@ -450,6 +621,8 @@ _set_mcga_palette proc far
 	loop    @@pl1
 	sti
 
+	pop     dx
+	pop     cx
 	pop     si
 	pop     ds
 	pop     bp
@@ -465,7 +638,9 @@ _write_mcga_graphics proc far
 	mov     bp,sp
 
 	push    ds
+	push    es
 	push    si
+	push    cx
 
 	cli
 	lds     si, [bp+X]
@@ -477,7 +652,9 @@ _write_mcga_graphics proc far
 	rep movsw
 	sti
 
+	pop     cx
 	pop     si
+	pop	es
 	pop     ds
 	pop     bp
 	ret
@@ -493,6 +670,7 @@ _write_cga_graphics proc far
 
 	push    ds
 	push    si
+	push	cx
 
 	cli
 	lds     si, [bp+X]
@@ -504,6 +682,7 @@ _write_cga_graphics proc far
 	rep movsw
 	sti
 
+	pop	cx
 	pop     si
 	pop     ds
 	pop     bp
@@ -515,18 +694,8 @@ public _stop_graphics
 
 _stop_graphics proc far
 
-	push    bp
-	mov     bp,sp
-
-	push    ds
-	push    si
-
 	mov     ax, 3
 	int     10h
-
-	pop     si
-	pop     ds
-	pop     bp
 	ret
 
 _stop_graphics endp
