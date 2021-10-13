@@ -1,28 +1,27 @@
 # jhpyle/mTCP
 
-This is an unofficial fork of [mTCP] by Michael B. Brutman.
-
-This fork makes the Telnet application in [mTCP] more usable when
-connecting to Linux machines.  It adds:
+This is an unofficial fork of the Telnet application from Michael
+B. Brutman's [mTCP].  It adds:
 
 * [Enhanced Keyboard] support
 * Mouse and clipboard support
 * Translation of incoming Unicode characters
 * [Sixel graphics]
+* Printer support
 
-The recompiled binary is available as the [TELNET.EXE] file and the
+The binary is available as the [TELNET.EXE] file and the
 [TELNET88.EXE] file, which are in the [bin] directory.  The
-[TELNET88.EXE] file is for machines without [Enhanced Keyboard] support.
+[TELNET88.EXE] file is for machines without [Enhanced Keyboard]
+support.
 
-The fork is based on Mr. Brutman's `mTCP-src_2020-03-07.zip`.
+The fork is based on the [mTCP-src_2020-03-07.zip] version of [mTCP].
 
 ## The changes
 
-The purpose of this repository is to expand the capabilities of [mTCP]
-Telnet's `ansi` terminal emulator.  Where a feature was not supported
-by (what appears to be) the `ansi` standard, ideas were borrowed from
-the `xterm` standard.  (The exception is the Ctrl-backspace keyboard
-command, for which a custom escape sequence was used.)
+The purpose of this repository is to expand the `ansi` terminal
+emulation capabilities of [mTCP]'s Telnet application.  Where a
+feature is not supported by the `ansi` standard, ideas are borrowed
+from the `xterm` standard.
 
 ### Keyboard
 
@@ -34,7 +33,7 @@ The following keys are transmitted:
 * Shift, Ctrl, Ctrl-shift, Alt, and Alt-Shift modifications of the above;
 * Tab, Ctrl-Tab, Shift-Tab;
 * Ctrl-Backspace;
-* Ctrl-Space;
+* Ctrl-Space; and
 * Ctrl-PrtScr.
 
 In the official [mTCP], Page Up and Page Down scroll are not passed
@@ -44,7 +43,7 @@ Down keys (or Ctrl-Page Up and Ctrl-Page Dn with [TELNET88.EXE]), and
 Page Up and Page Down are passed through to the server.
 
 For compatibility with [Emacs], all Alt-(key) combinations that are
-not used by [mTCP] Telnet application are passed through as ESC-(key).
+not used by the Telnet application are passed through as ESC-(key).
 
 The Delete key is passed through as `ESC [ 3 ~` instead of the default
 of character 127.
@@ -57,10 +56,10 @@ support for the [Enhanced Keyboard].
 Mouse support is available in two forms.
 
 First, if the server sends back `xterm` [DECSET] signals to enable
-mouse tracking, mouse activity is transmitted to the server using the
+mouse tracking, mouse activity is transmitted to the server using
 `xterm` escape sequences.  [Emacs] sends these sequences when
 `xterm-mouse-mode` is in use, and [Vim] sends them when `set mouse=a`
-is used.  Midnight Commander provides mouse support if the `-x` switch
+is used.  [Midnight Commander] provides mouse support if the `-x` switch
 is used to enable `xterm` mode.
 
 Second, if the [DECSET] signals are not received, mouse activity does
@@ -76,26 +75,29 @@ be used for copying and pasting.  The controls are:
 Clicking the left and right mouse buttons at the same time emulates
 the middle mouse button.
 
-For mouse support to work, you need to run [MOUSE.COM] (which should
-be available as part of your DOS system) before running [TELNET.EXE]
-or [TELNET88.EXE].
+For mouse support to work, you may need to install a mouse driver
+(typically [MOUSE.COM]) before running [TELNET.EXE] or [TELNET88.EXE].
 
 ### Unicode
 
-If UTF-8 characters are received, they are translated if possible to
-one of the 256 characters that can be displayed in text mode.  If no
-translation is available, a default character is printed.  Translation
-does not take place when sending outbound characters.
+When UTF-8 characters are received, they are translated if possible
+into one of the 256 characters that can be displayed in text mode.  By
+default, Unicode characters are translated into [Code Page 437].  If
+no translation is available, a default character, `¿`, is printed.
 
-By default, Unicode characters are translated into [Code Page 437] and
-the default character for an untranslatable Unicode character is `¿`.
+Unicode translation does not take place when sending outbound
+characters.
 
-Unicode translation can be configured by adding directives to your
-`MTCP.CFG` file such as the following, which will enable [Code Page
-737] instead of [Code Page 437]:
+The [Code Page] and the default unprintable character are
+configuraable in the `MTCP.CFG` file using the directives
+`TELNET_UTF`, `TELNET_CODEPAGE`, and `TELNET_UTF_DEFAULT`.  For
+example, the following excerpt demonstrates enabling [Code Page 737]
+translation in place of the default [Code Page 437], and setting the
+default character for unprintable Unicode sequences to the space
+(0x20).
 
     TELNET_CODEPAGE 737
-    TELNET_UTF_DEFAULT 0xb7
+    TELNET_UTF_DEFAULT 0x20
     TELNET_UTF 737 0x0000 0x00
     TELNET_UTF 737 0x0001 0x01
     TELNET_UTF 737 0x0002 0x02
@@ -103,32 +105,33 @@ Unicode translation can be configured by adding directives to your
     ...
     TELNET_UTF 737 0x00a0 0xff
 
-There are example configurations in the [`config`] folder for [Code
-Page 737], [Code Page 775], [Code Page 850], [Code Page 852], [Code
-Page 855], [Code Page 857] [Code Page 860], [Code Page 861], [Code
-Page 862], [Code Page 863], [Code Page 864], [Code Page 865], [Code
-Page 866], [Code Page 869], and [Code Page 874].  A file is also
+There are complete example configurations in the [`config`] folder for
+[Code Page 737], [Code Page 775], [Code Page 850], [Code Page 852],
+[Code Page 855], [Code Page 857] [Code Page 860], [Code Page 861],
+[Code Page 862], [Code Page 863], [Code Page 864], [Code Page 865],
+[Code Page 866], [Code Page 869], and [Code Page 874].  A file is also
 included for [Code Page 437] in case you want to customize the default
 translation.
 
 You can copy and paste from these files into your `MTCP.CFG` file.
 The `TELNET_CODEPAGE` directive selects a code page, and any
-directives beginning with `TELNET_UTF 737` will be used to define the
-translations that are used.  The numbers must be written in
-hexadecimal.  The format of each line is:
+directives beginning with `TELNET_UTF` will be used to define the
+translations that are used.  The format of each line is:
 
     TELNET_UTF <CODE_PAGE_NUMBER> <UNICODE_NUMBER> <CHARACTER_NUMBER>
 
 where `CODE_PAGE_NUMBER` is the number of the code page (e.g. 737),
-the `UNICODE_NUMBER` is a hexadecimal Unicode number (e.g., `0x266a` for
-the musical note character) and `CHARACTER_NUMBER` is a hexadecimal
-8-bit number representing the character on the screen (e.g., `0x0d` for
-the musical note character).
+the `UNICODE_NUMBER` is a hexadecimal Unicode number (e.g., `0x266a`
+for the musical note character) and `CHARACTER_NUMBER` is a
+hexadecimal 8-bit number representing the character on the screen
+(e.g., `0x0d` for the musical note character).  Note that the
+`TELNET_CODEPAGE` directive will not have any effect in the absence of
+`TELNET_UTF` lines that define the translations for the code page.
 
 The `TELNET_UTF_DEFAULT` directive indicates which character should be
 printed if there is no translation for a particular Unicode character.
 The number must be written in hexadecimal.  The default is `0xa8`,
-which is the character ¿.
+which is the character ¿ in [Code Page 437].
 
 If you switch between code pages, you can keep definitions for several
 code pages in your `MTCP.CFG` file and change only the
@@ -144,8 +147,12 @@ translation tables available on [unicode.org].
 ### Graphics
 
 If a [Sixel graphics] escape sequence is encountered, the image will
-be processed and displayed on the screen.  After viewing the image,
-the user can then press any key to get back to text mode.
+be downloaded and then displayed on the screen.  It may take
+significant time for the image to download.  While the image is
+downloading, the screen is unchanged; this is so that you can keep
+reading what is on the screen while you wait for the graphics image to
+appear.  After viewing the image, you can then press any key to get
+back to text mode.
 
 The supported graphics modes are:
 
@@ -156,13 +163,13 @@ The supported graphics modes are:
 * 640x200x2 - [CGA]
 
 Telnet will use the highest resolution graphics mode available, given
-the number of colors in the Sixel image.  If there are two colors, it
-will use a two-color graphics mode.  If there are four colors, it will
-use a 320x200x4 mode with the matching palette.
+the number of colors in the image.  If there are two colors, it will
+use a two-color graphics mode.  If there are four colors, it will use
+a 320x200x4 mode with the matching palette.
 
-Telnet does not autodetect whether you have a [Hercules Graphics Card]
-or [VGA] or [MCGA].  By default, it assumes you have [VGA] or [MCGA]
-and it will try to display in the [VGA]/[MCGA] modes.
+Telnet does not autodetect whether you have a [Hercules Graphics
+Card], [VGA], or [MCGA].  By default, it assumes you have [VGA] or
+[MCGA] and it will try to display images in the [VGA]/[MCGA] modes.
 
 If your computer does not support the [VGA]/[MCGA] modes, you will
 need to add a line to your `MTCP.CFG` file to stop it from using those
@@ -178,19 +185,14 @@ Telnet will not do any image resizing or dithering.  If an image is
 wider or taller than the graphics mode supports, then it will not
 display.
 
-For best results, telnet to a Linux machine and use the included
-[show] script on Linux to send Sixel escape sequences back to your
-Telnet client.  This script calls the [`img2sixel`] command with the
-appropriate parameters for resizing images and converting colors.
+For best results, Telnet to a Linux machine and use the included
+[show] script to convert an image file to [Sixel] escape sequences.
+This script calls the [`img2sixel`] command with the appropriate
+parameters for resizing images and converting colors.
 
 Without any parameters, [show] will display an image in 256 colors.
 
     show my_image.png
-
-With the `--me` parameter, [show] will take a picture with
-`/dev/video0` and then display it:
-
-    show --me
 
 If you have the [Hercules Graphics Card], use the `--hercules` switch:
 
@@ -202,7 +204,8 @@ images are reduced to four colors.
     show --cga my_image.png
 
 By default, [show] will use the bright cyan/magenta/white palette in
-`--cga` mode.  You can tell it to use a different palette:
+`--cga` mode.  You can tell it to use a different palette with the
+`--colors` switch:
 
     show --colors CyanMagenta my_image.png
     show --colors LightCyanMagenta my_image.png
@@ -213,7 +216,7 @@ To make an image display in monochrome, use the `--mono` switch:
 
     show --mono my_mono_image.png
 
-By default, the `--mono` switch will resize the image to fit in
+By default, the `--mono` switch will shrink the image to fit in
 640x480, which [VGA] and [MCGA] monitors can display.  If you have
 [CGA] only, make sure to include the `--cga` switch:
 
@@ -221,12 +224,54 @@ By default, the `--mono` switch will resize the image to fit in
 
 This will resize the image to fit within [CGA]'s 640x200 resolution.
 
+With the `--me` parameter, [show] will take a picture with
+`/dev/video0` and then display it:
+
+    show --me
+
 To see the usage instructions, call `show` with the `--help` switch.
 
     show --help
 
-For instructions on installing the [show] utility, see the Setup
-section below.
+For instructions on installing the [show] utility and integrating it
+with applications, see the Setup section below.
+
+### Printing
+
+Historically, the typewriter preceded the computer, and the [first
+terminals] acted like typewriters, printing characters to paper rather
+than to a screen.  Early video terminals, like the [VT52] and [VT100],
+supported connecting a printer to the terminal, and could switch into
+a mode in which incoming characters were sent to the printer and the
+user could create a "hardcopy" of the session.  When the [VT100]
+terminal received `ESC [ 5 i`, all characters received thereafter
+would be relayed to the attached printer.  When the terminal received
+`ESC [ 4 i`, the terminal would stop relaying the characters to the
+printer.  The `ansi` and `xterm` protocols incorporated this feature.
+
+This version of [mTCP] Telnet has been modified to provide support for
+this method of printing.  By default, printing is disabled, however,
+so that even if the remote server sends `ESC [ 5 i`, the printer will
+not print anything.  Pressing Alt-P toggles the enabling and disabling
+of printing.  You can see whether printing is enabled by visiting the
+help screen (Alt-H).  If printing is enabled and the remote server
+sends `ESC [ 5 i`, Telnet will start sending all received characters
+to the LPT1 printer.  It will continue to do so until it receives `ESC
+[ 4 i`.  Characters will also be sent to the screen.
+
+If your printer requires initialization, you can add a
+`TELNET_PRINTER_INIT` line to your `MTCP.CFG` file, listing a series
+of ASCII characters expressed as two-digit hexadecimal numbers
+separated by commas.  For example, these are printer initialization
+codes for a Diablo 630 printer.
+
+```
+TELNET_PRINTER_INIT 1b,51,0d,1b,1f,0b,1b,1e,09,1b,35
+```
+
+Up to sixteen ASCII characters can be defined using
+`TELNET_PRINTER_INIT`.  These characters are sent to the printer the
+first time you type Alt-P to enable printing.
 
 ## Compatibility
 
@@ -246,9 +291,7 @@ This package has been tested on:
 
 Unfortunately, I do not have access to other machines, so I do not
 know what problems may arise on other systems.  Please feel free to
-create GitHub issues to let me know what doesn't work.  [EGA] graphics
-modes will not be supported unless someone with access to a computer
-with [EGA] graphics makes the changes.
+create GitHub issues to let me know what doesn't work.
 
 As discussed above, you will need to add `TELNET_HGC 1` or
 `TELNET_CGA 1` to your `MTCP.CFG` file if you have a [Hercules
@@ -256,44 +299,45 @@ Graphics Card] or [CGA] adapter in your system.
 
 ## Setup
 
-In order for remote machines to communicate with your Telnet client
-using escape sequences for colors, mouse support, and keypresses, the
-remote machines will need to know the precise capabilities of your
-Telnet client.  On Linux, terminal capabilites are defined in a
-"termcap" file.  The `TERM` variable in your remote shell environment
-tells the remote machine which "termcap" file to use.  `TERM` is
-typically set to a value like `ansi`, `vt320`, or `xterm`.
-Terminal-based applications use the `TERM` variable to decide what
-features will be enabled and how they will communicate with you.
+In order for your Telnet client and remote servers to communicate
+effectively using escape sequences for colors, mouse support, and
+keypresses, the remote machines will need to know the precise
+capabilities of your Telnet client.  On Linux, terminal capabilites
+are defined in a "terminfo" file.  The `TERM` variable in your remote
+shell environment tells the remote machine which "terminfo" file to
+use.  `TERM` is typically set to a value like `ansi`, `vt320`, or
+`xterm`.  Terminal-based applications use the `TERM` variable to
+decide what features will be enabled and how they will communicate
+with you.
 
-The mTCP Telnet client reports its terminal type as `ANSI`.  This can
-be changed by setting the variable `TELNET_TERMTYPE` in the `MTCP.CFG`
+The Telnet client reports its terminal type as `ANSI`.  This can be
+changed by setting the variable `TELNET_TERMTYPE` in the `MTCP.CFG`
 file, but it is generally better to keep it as `ANSI`.  Many
-terminal-based applications do not support non-standard terminal
-types, so you are generally better off using a standard terminal type
-like `ANSI`.
+terminal-based applications look at the `TERM` variable and expect it
+to be set to a standard value like `xterm`, `vt100`, or `ansi`, so you
+are generally better off using a standard terminal type like `ANSI`.
 
 The `ANSI` standard is not well-defined.  There are many variants, and
-the one that mTCP Telnet uses is its own variant.  In order to use all
-of the features of mTCP Telnet's ANSI terminal emulation, you need to
-create your own "termcap" file.  This package contains the source code
-for this "termcap" file ([ansi.src]).
+the one that this Telnet uses is its own variant.  In order to use all
+of the features of this Telnet's ANSI terminal emulation, you need to
+create your own "terminfo" file.  This package contains the source
+code for this "terminfo" file ([ansi.src]).
 
 On every machine to which you might want to connect (directly with
-Telnet or indirectly with [ssh]), install the `ansi` "termcap" file
+Telnet or indirectly with [ssh]), install the `ansi` "terminfo" file
 and the [show] script.
 
-You can do this by cloning the GitHub repository and running
-`./install.sh` as root.  If you don't have `git` installed, you can
-install it with `sudo apt-get install git`.
+You can do this by cloning the GitHub repository with `git` and
+running `./install.sh` as root.  If you don't have `git` installed,
+you can install it with `sudo apt-get install git`.
 
 The [install.sh] script copies [show] to `/usr/local/bin`, installs
 color map PNG files in `/usr/local/share/sixel`, and compiles and
-installs the `ansi` "termcap" file.
+installs the `ansi` "terminfo" file using `tic`.
 
 The [show] script depends on `libsixel-bin` (for `img2sixel`),
 `libimage-size-perl` (for `imgsize`), and `streamer` (for the `--me`)
-option.  The installation of the `ansi` "termcap" file depends on the
+option.  The installation of the `ansi` "terminfo" file depends on the
 `tic` command, which is available in `ncurses-bin`.
 
     sudo apt-get install libsixel-bin libimage-size-perl streamer ncurses-bin
@@ -326,14 +370,10 @@ directory other than `/usr/local/share/sixel`, make sure you edit the
 [show] script to change the definition of `COLORMAPS` so that it
 points to the directory you are using.
 
-To install the `ansi` "termcap" file manually, copy the file
-[ansi.src] to the current directory.
+To install the `ansi` "terminfo" file manually, compile the `ansi.src`
+file with `tic`:
 
-    curl -o ansi.src https://github.com/jhpyle/mTCP/blob/master/ansi.src
-
-Then run:
-
-    sudo tic -x -o/etc/terminfo ansi.src
+    sudo tic -x -o/etc/terminfo mTCP/ansi.src
 
 Here, `/etc/terminfo` is the directory where custom terminfo
 description files are installed.  It might be located in a different
@@ -346,7 +386,7 @@ If you do not have administrator access on the machine, you can
 install the terminfo description for yourself only.  You can do this
 by running:
 
-    tic -x ansi.src
+    tic -x mTCP/ansi.src
 
 This will compile the [ansi.src] file and create the terminfo
 description file `~/.terminfo/a/ansi`.
@@ -357,11 +397,11 @@ like to edit it).
 
 ### Configuring your applications
 
-The "termcap" file, on its own, is not sufficient for all of your
-applications to work appropriately with the mTCP Telnet client.  Many
+The "terminfo" file, on its own, is not sufficient for all of your
+applications to work appropriately with the Telnet client.  Many
 applications look at the `TERM` environment variable but bypass the
-"termcap" system.  You will need to edit the configuration files of
-your applications to get the most out of mTCP Telnet.
+"terminfo" system.  You will need to edit the configuration files of
+your applications to get the most out of Telnet.
 
 To improve your [bash] command line experience, add this to your
 `~/.inputrc` file:
@@ -508,7 +548,7 @@ I created a batch file called `MAKE.BAT` to recompile only the parts I was editi
 This is much faster than waiting for a full `wmake` to complete.
 
 To build a version of `telnet.exe` without [Enhanced Keyboard]
-support, use the `OL.CFG` file instead of `T.CFG`.
+support, use the `O.CFG` file instead of `T.CFG`.
 
 For a final build, run `wmake` and then `wmake patch`, and generate
 both `TELNET88.EXE` and `TELNET.EXE`.  (See the file `MAKEALL.BAT`)
@@ -527,6 +567,7 @@ both `TELNET88.EXE` and `TELNET.EXE`.  (See the file `MAKEALL.BAT`)
 [DosBox]: https://www.dosbox.com/
 [Vim]: https://www.vim.org/
 [Emacs]: https://www.gnu.org/software/emacs/
+[Sixel]: https://en.wikipedia.org/wiki/Sixel
 [Sixel graphics]: https://en.wikipedia.org/wiki/Sixel
 [show]: https://github.com/jhpyle/mTCP/blob/master/sixel/show
 [install.sh]: https://github.com/jhpyle/mTCP/blob/master/install.sh
@@ -536,6 +577,7 @@ both `TELNET88.EXE` and `TELNET.EXE`.  (See the file `MAKEALL.BAT`)
 [Lynx]: https://en.wikipedia.org/wiki/Lynx_(web_browser)
 [unicode.org]: https://www.unicode.org/Public/MAPPINGS/VENDORS/MICSFT/PC/
 [`config`]: https://github.com/jhpyle/mTCP/blob/master/config
+[Code Page]: https://en.wikipedia.org/wiki/Code_page
 [Code Page 437]: https://en.wikipedia.org/wiki/Code_page_437
 [Code Page 737]: https://en.wikipedia.org/wiki/Code_page_737
 [Code Page 775]: https://en.wikipedia.org/wiki/Code_page_775
@@ -568,3 +610,9 @@ both `TELNET88.EXE` and `TELNET.EXE`.  (See the file `MAKEALL.BAT`)
 [EGA]: https://en.wikipedia.org/wiki/Enhanced_Graphics_Adapter
 [ssh]: https://en.wikipedia.org/wiki/Secure_Shell
 [bash]: https://en.wikipedia.org/wiki/Bash_(Unix_shell)
+[Diablo 630]: https://en.wikipedia.org/wiki/Diablo_630
+[mTCP-src_2020-03-07.zip]: http://www.brutman.com/mTCP/mTCP-src_2020-03-07.zip
+[first terminals]: https://en.wikipedia.org/wiki/Teletype_Model_33
+[VT52]: https://en.wikipedia.org/wiki/VT52
+[VT100]: https://en.wikipedia.org/wiki/VT100
+[Midnight Commander]: https://midnight-commander.org/

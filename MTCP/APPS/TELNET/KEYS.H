@@ -28,6 +28,7 @@
 
    2012-04-29: Split out from telnet when xmodem and ymodem were added
    2019-05-10: Extended keyboard support
+   2021-10-13: Added Alt-P key as a telnet command.
 
 */
 
@@ -137,6 +138,7 @@
 #define K_Local_PageUp      (96)
 #define K_CenterKey         (97)
 #define K_Ctrl_PrtScr       (98)
+#define K_Alt_P             (99)
 
 typedef struct {
   uint8_t specialKey;  // K_NoKey, K_NormalKey, or a special key code

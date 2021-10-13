@@ -31,6 +31,7 @@
    2018-10-27: Add code to prevent CGA snow
    2020-05-17: Extended keyboard support
    2020-06-13: Alternate code page support.
+   2021-10-13: Added printer support.
 
 */
 
@@ -42,6 +43,8 @@
 #define MAX_SELECTION_SIZE 2000
 #define MAX_SELECTION_SIZE_PLUS 2048
 #define NUMBER_OF_DEFAULT_UTF_TRANSLATIONS 189
+#define PRINT_BUFFER_SIZE  (4096)
+
 //#define BASE64_BUFFER_SIZE 3000
 
 #include <stdarg.h>
@@ -50,6 +53,7 @@
 #include "inlines.h"
 #include "utils.h"
 
+extern "C" uint16_t cdecl send_char_to_printer( char far *character );
 
 class Screen {
 
@@ -232,7 +236,16 @@ class Screen {
     utfTrans far *transTable;
     int      transTableCount;
     uint8_t  nonPrintable;
-    uint8_t  pad8;
+
+    uint8_t PrintingAllowed;
+    uint8_t AutoPrint;
+    uint8_t writeCount;
+    char *printerBuffer;
+    uint16_t printerReadIndex;
+    uint16_t printerWriteIndex;
+  //FILE *printerFile;
+
+  //void send_char_to_file( char character );
 
   private:
 

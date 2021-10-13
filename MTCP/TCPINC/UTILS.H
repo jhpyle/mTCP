@@ -183,7 +183,7 @@ typedef struct {
 
 
 #define UTILS_LINEBUFFER_LEN (160)
-#define UTILS_PARAMETER_LEN (40)
+#define UTILS_PARAMETER_LEN (50)
 
 class Utils {
 

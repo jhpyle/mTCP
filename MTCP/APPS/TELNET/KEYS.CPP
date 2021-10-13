@@ -28,6 +28,7 @@
 
    2012-04-29: Split out from telnet when xmodem and ymodem were added
    2020-05-10: Extended keyboard support
+   2021-10-13: Added Alt-P key as a telnet command.
 
 */
 
@@ -63,7 +64,7 @@ Key_t getKey( void ) {
       case 0x16: { rc.specialKey = K_Alt_U;           rc.local = 1;  break; }
       case 0x17: { rc.specialKey = K_AltKey;   rc.normalKey = 0x69;  break; }
       case 0x18: { rc.specialKey = K_AltKey;   rc.normalKey = 0x6f;  break; }
-      case 0x19: { rc.specialKey = K_AltKey;   rc.normalKey = 0x70;  break; }
+      case 0x19: { rc.specialKey = K_Alt_P;           rc.local = 1;  break; }
       case 0x1c: { rc.specialKey = K_AltKey;   rc.normalKey = 0x0d;  break; }
       case 0x1e: { rc.specialKey = K_AltKey;   rc.normalKey = 0x61;  break; }
       case 0x1f: { rc.specialKey = K_AltKey;   rc.normalKey = 0x73;  break; }

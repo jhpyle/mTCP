@@ -34,6 +34,7 @@
    2020-05-17: Mouse and Unicode support.
    2020-06-07: Fixed bugs with selection and made more efficient.
    2020-06-13: Alternate code page support.
+   2021-10-13: Added printer support.
 */
 
 
@@ -50,6 +51,10 @@
 #include "telnetsc.h"
 #include "utils.h"
 //#include "trace.h"
+
+// void Screen::send_char_to_file( char character ) {
+//   fwrite( &character, 1, 1, printerFile );
+// }
 
 inline static uint8_t UTF8Decode( uint8_t *p, uint16_t *c ) {
     uint8_t c0, c1, c2;
@@ -186,6 +191,12 @@ int8_t Screen::init( uint8_t backScrollPages, uint8_t initWrapMode, bool useMcga
   wrapMode = initWrapMode;
 
   resetTerminalState( useMcga );
+
+  PrintingAllowed = 0;
+  AutoPrint = 0;
+  printerReadIndex = 0;
+  printerWriteIndex = 0;
+  //printerFile = NULL;
 
   return 0;
 }
@@ -892,6 +903,18 @@ void Screen::add( char *buf, uint16_t len ) {
         virtualUpdated = 1;
       }
 
+    }
+    if ( AutoPrint && c > 0 && c < 128 ){
+      if ( ++printerWriteIndex >= PRINT_BUFFER_SIZE ){
+        printerWriteIndex = 0;
+      }
+      if ( printerWriteIndex == printerReadIndex ){
+        send_char_to_printer( &(printerBuffer[printerReadIndex]) );
+        if ( ++printerReadIndex >= PRINT_BUFFER_SIZE ){
+          printerReadIndex = 0;
+        }
+      }
+      printerBuffer[printerWriteIndex] = c;
     }
 
   } // end for

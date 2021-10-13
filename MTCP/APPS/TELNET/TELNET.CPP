@@ -59,6 +59,7 @@
    2021-09-21: Added Unicode translation for vowels with macrons, added
                Hercules Graphics Card support, and changed the cursor to
                the default cursor.
+   2021-10-13: Added printer support.
 
    Todo:
 
@@ -109,6 +110,8 @@
 #define TCP_RECV_BUF_SIZE  (4096)
 #define RECV_BUF_SIZE      (2048)
 #define TERMTYPE_MAXLEN      (30)
+#define PRINTER_INIT_SIZE    (17)
+#define PRINT_COUNT           (8)
 
 #define TELNET_CONNECT_TIMEOUT (30000ul)
 
@@ -138,6 +141,7 @@ uint8_t SendBsAsDel  = 1;
 uint8_t LocalEcho    = 0;      // Is local echoing enabled?
 uint8_t NewLineMode  = 4;      // 0 is CR/LF, 1 is CR, 2 is LF, 3 is CR/NUL and 4 is AUTO
 uint8_t BackScrollPages = 4;
+uint8_t PrinterInitialized = 0;
 
 uint32_t ConnectTimeout = TELNET_CONNECT_TIMEOUT; // How many ms to wait for a connection
 
@@ -531,6 +535,7 @@ uint8_t ColorScheme = 0;  // 0 default, 1 = CGA_MONO
 
 uint8_t *fgColorMap;
 uint8_t *bgColorMap;
+char printerInit[PRINTER_INIT_SIZE] = "";
 
 // Input is ANSI, output is CGA Attribute
 uint8_t fgColorMap_CGA[] = {
@@ -601,6 +606,8 @@ static char tmpBuf[160];
 
 static char CopyrightMsg1[] = "mTCP Telnet by M Brutman (mbbrutman@gmail.com) (C)opyright 2009-2020\r\n";
 static char CopyrightMsg2[] = "Version: " __DATE__ "\r\n\r\n";
+
+extern "C" uint16_t cdecl initialize_printer( char far *initstring );
 
 extern "C" uint8_t far mouse_changed;
 
@@ -1160,6 +1167,20 @@ int main( int argc, char *argv[] ) {
     #endif
     #endif
 
+    if (s.printerReadIndex != s.printerWriteIndex){
+      s.writeCount = PRINT_COUNT;
+      while (s.printerReadIndex != s.printerWriteIndex && s.writeCount-- > 0){
+        if (++s.printerReadIndex >= PRINT_BUFFER_SIZE){
+          s.printerReadIndex = 0;
+        }
+        send_char_to_printer(&(s.printerBuffer[s.printerReadIndex]));
+        // if ( s.printerReadIndex == s.printerWriteIndex && s.AutoPrint == 0 && s.printerFile != NULL ){
+        //   fclose( s.printerFile );
+        //   s.printerFile = NULL;
+        // }
+      }
+    }
+
     if ( s.isVirtualScreenUpdated( ) && UserInputMode == UserInputMode_t::Telnet ) {
       if ( mouse.xterm_any && mouse.showing ) {
         mouse_hide();
@@ -1489,7 +1510,6 @@ int main( int argc, char *argv[] ) {
   return 0;
 }
 
-
 // This version of send is safe in that it checks the return code from the
 // real socket send and loops if necessary to make sure the packet gets out.
 //
@@ -1527,7 +1547,6 @@ void send( uint8_t *userBuf, uint16_t userBufLen ) {
   Tcp::drivePackets( );
 }
 
-
 static void toggleOnSound( void ) {
   sound(500); delay(50); sound(750); delay(50); nosound( );
 }
@@ -1563,6 +1582,24 @@ uint8_t processUserInput_TelnetLocal( Key_t key ) {
       toggleOnSound( );
     }
     else {
+      toggleOffSound( );
+    }
+  }
+  else if ( key.specialKey == K_Alt_P ) {
+    s.PrintingAllowed = !s.PrintingAllowed;
+    if ( s.PrintingAllowed ) {
+      toggleOnSound( );
+      if ( !PrinterInitialized ){
+        s.printerBuffer = (char *)malloc( PRINT_BUFFER_SIZE );
+        s.printerReadIndex = 0;
+        s.printerWriteIndex = 0;
+        initialize_printer(printerInit);
+        //s.printerFile = NULL;
+        PrinterInitialized = 1;
+      }
+    }
+    else {
+      s.AutoPrint = 0;
       toggleOffSound( );
     }
   }
@@ -2790,10 +2827,12 @@ HelpMenu_t HelpMenu[] = {
   {42,  7, &scNormal,     "Wrap at right margin On/Off" },
   {10,  8, &scCommandKey, "Alt-B" },
   {16,  8, &scNormal,     "Send Backspace as Delete On/Off" },
+  {50,  8, &scCommandKey, "Alt-P" },
+  {56,  8, &scNormal,     "Enable Printing On/Off" },
   {10,  9, &scCommandKey, "Alt-N" },
   {16,  9, &scNormal,     "Send [Enter] as CR/NUL, CR/LF, CR or LF" },
   { 0, 11, &scNormal,     "Virtual buffer pages:    Echo:       Wrap:      Term type:" },
-  { 0, 12, &scNormal,     "Send Backspace As Delete:      Send [Enter] as:"},
+  { 0, 12, &scNormal,     "Print:     Send Backspace As Delete:      Send [Enter] as:"},
   { 0, 17, &scBright,     "Press a key to go back to your session ..." },
   {99,  0, 0, ""}
 };
@@ -2831,8 +2870,9 @@ void doHelp( void ) {
   s.myCprintf( 31, 11, scToggleStatus, "%s", (LocalEcho?"On":"Off") );
   s.myCprintf( 43, 11, scToggleStatus, "%s", (s.isWrapModeOn( )?"On":"Off") );
   s.myCprintf( 59, 11, scToggleStatus, "%s", TermType );
-  s.myCprintf( 26, 12, scToggleStatus, "%s", (SendBsAsDel?"On":"Off") );
-  s.myCprintf( 48, 12, scToggleStatus, NewLineModes[NewLineMode] );
+  s.myCprintf( 7,  12, scToggleStatus, "%s", (s.PrintingAllowed?"On":"Off") );
+  s.myCprintf( 37, 12, scToggleStatus, "%s", (SendBsAsDel?"On":"Off") );
+  s.myCprintf( 59, 12, scToggleStatus, NewLineModes[NewLineMode] );
 
   s.myCprintf( 0, 14, scNormal, "Tcp: Sent %lu Rcvd %lu Retrans %lu Seq/Ack errs %lu Dropped %lu",
                Tcp::Packets_Sent, Tcp::Packets_Received, Tcp::Packets_Retransmitted,
@@ -2949,7 +2989,8 @@ void getCfgOpts( void ) {
 
   Utils::openCfgFile( );
 
-  char tmp[10];
+  char tmp[50];
+  char *printerInitChar;
 
   if ( Utils::getAppValue( "TELNET_VIRTBUFFER_PAGES", tmp, 10 ) == 0 ) {
     BackScrollPages = atoi( tmp );
@@ -2966,6 +3007,23 @@ void getCfgOpts( void ) {
   if ( Utils::getAppValue( "TELNET_AUTOWRAP", tmp, 10 ) == 0 ) {
     InitWrapMode = atoi(tmp);
     InitWrapMode = InitWrapMode != 0;
+  }
+
+  if ( Utils::getAppValue( "TELNET_PRINTER_INIT", tmp, 48 ) == 0 ) {
+    printerInitChar = printerInit;
+    int n = strlen(tmp);
+    for(int i = 0; i < n; ++i){
+      if ( *(tmp + i) == 48 && *(tmp + i + 1) == 120 && i < ( n - 3 ) ){
+        i += 2;
+      }
+      if ( ( *(tmp + i) >= 65 && *(tmp + i) <= 70 ) || ( *(tmp + i) >= 97 && *(tmp + i) <= 102 ) || ( *(tmp + i) >= 48 && *(tmp + i) <= 57 ) ){
+        if ( sscanf( tmp + i, "%hhx", printerInitChar ) == 1 ){
+          printerInitChar++;
+          i++;
+        }
+      }
+    }
+    *printerInitChar = 0;
   }
 
   if ( Utils::getAppValue( "TELNET_SENDBSASDEL", tmp, 10 ) == 0 ) {
@@ -3058,6 +3116,15 @@ static void shutdown( int rc ) {
   if ( g.useHercules ){
     disable_hercules();
   }
+  // if ( s.printerFile != NULL ) {
+  //   fclose( s.printerFile );
+  // }
+  // if ( s.printerBuffer ) {
+  //   free( s.printerBuffer );
+  // }
+  // if ( s.transTableCount != 0 ) {
+  //   free( s.transTable );
+  // }
   exit( rc );
 }
 
@@ -4376,6 +4443,23 @@ void processAnsiCommand( uint8_t commandLetter ) {
     // case 'h': ANSI set options - not implemented
     // case 'l': ANSI reset options - not implemented
 
+    case 'i': {
+      if ( s.PrintingAllowed ){
+        if ( parms[0] == 5 ){
+          s.AutoPrint = 1;
+          // if ( s.printerFile == NULL ) {
+          //   s.printerFile = fopen( "dump.prn", "wb" );
+          //   if ( s.printerFile == NULL ) {
+          //     TRACE_WARN(( "Download: Error opening dump.prn, %s\n", strerror(errno) ));
+          //     shutdown(-1);
+          //   }
+          // }
+        }
+        else if ( parms[0] == 4 ){
+          s.AutoPrint = 0;
+        }
+      }
+    }
     default: {
       TRACE_WARN(( "Ansi: Unknown cmd: %c %s\n", commandLetter, traceBuffer ));
       break;
