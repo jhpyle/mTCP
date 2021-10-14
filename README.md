@@ -273,6 +273,20 @@ Up to sixteen ASCII characters can be defined using
 `TELNET_PRINTER_INIT`.  These characters are sent to the printer the
 first time you type Alt-P to enable printing.
 
+This repository contains a Python script, [tprint], that can be used
+to print a file or an output stream.  You can call it either as a pipe
+or you can give it the name of one or more files:
+
+    ps ax | tprint
+    tprint foo.txt
+    tprint foo.txt bar.txt
+    tprint *.msg
+
+In addition, this repository contains two bash scripts, [startprint]
+and [stopprint], which echo the escape sequences for turning printing
+on and off.  As explained in "Configuring your applications," below,
+you can also bind keys in [bash] for turning printing on and off.
+
 ## Compatibility
 
 There are two versions of the executable:
@@ -395,6 +409,13 @@ After installing the terminfo file, you can run `rm ansi.src` because
 you will not need the `ansi.src` file any longer (unless you would
 like to edit it).
 
+To install the [tprint], [startprint], and [stopprint] utilities
+manually, run commands equivalent to the following:
+
+    sudo install mTCP/printing/tprint /usr/local/bin
+    sudo install mTCP/printing/stopprint /usr/local/bin
+    sudo install mTCP/printing/startprint /usr/local/bin
+
 ### Configuring your applications
 
 The "terminfo" file, on its own, is not sufficient for all of your
@@ -443,6 +464,16 @@ references `force_color_prompt`:
 
 If you would prefer a monochrome prompt, leave out
 `force_color_prompt=yes`.
+
+If you want to toggle printing while using [bash] using keystrokes,
+you can add the following to your `.bashrc` file:
+
+    bind -x '"\eOP":"echo -n -e \\e[5i"'
+    bind -x '"\eOQ":"echo -n -e \\e[4i"'
+
+This tells [bash] that when you press F1, it should send the escape
+sequence for turning printing on, and when you press F2, it should send
+the escape sequence for turning printing off.
 
 Add a `.mailcap` file to your home directory that contains:
 
@@ -570,6 +601,9 @@ both `TELNET88.EXE` and `TELNET.EXE`.  (See the file `MAKEALL.BAT`)
 [Sixel]: https://en.wikipedia.org/wiki/Sixel
 [Sixel graphics]: https://en.wikipedia.org/wiki/Sixel
 [show]: https://github.com/jhpyle/mTCP/blob/master/sixel/show
+[tprint]: https://github.com/jhpyle/mTCP/blob/master/printing/tprint
+[stopprint]: https://github.com/jhpyle/mTCP/blob/master/printing/stopprint
+[startprint]: https://github.com/jhpyle/mTCP/blob/master/printing/startprint
 [install.sh]: https://github.com/jhpyle/mTCP/blob/master/install.sh
 [R]: https://www.r-project.org/
 [ggplot2]: https://ggplot2.tidyverse.org/

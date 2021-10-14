@@ -12,6 +12,9 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 install ./sixel/show /usr/local/bin \
+&& install ./printing/tprint /usr/local/bin \
+&& install ./printing/stopprint /usr/local/bin \
+&& install ./printing/startprint /usr/local/bin \
 && mkdir -p /usr/local/share/sixel \
 && install -m 644 ./sixel/*.png /usr/local/share/sixel \
 && echo "Installed the 'show' command." \
