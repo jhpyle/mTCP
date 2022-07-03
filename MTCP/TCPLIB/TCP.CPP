@@ -2,7 +2,7 @@
 /*
 
    mTCP Tcp.cpp
-   Copyright (C) 2006-2020 Michael B. Brutman (mbbrutman@gmail.com)
+   Copyright (C) 2006-2022 Michael B. Brutman (mbbrutman@gmail.com)
    mTCP web page: http://www.brutman.com/mTCP
 
 
@@ -93,7 +93,7 @@ uint16_t Tcp::Pending_Outgoing = 0;
 
 void Tcp::dumpStats( FILE *stream ) {
   fprintf( stream, "Tcp: Sent %lu Rcvd %lu Retrans %lu Seq/Ack errs %lu Dropped %lu\n"
-		   "     Checksum errs %lu\n",
+                   "     Checksum errs %lu\n",
            Packets_Sent, Packets_Received, Packets_Retransmitted,
            Packets_SeqOrAckError, Packets_DroppedNoSpace, ChecksumErrors );
 }
@@ -351,7 +351,7 @@ void TcpSocket::reinit( ) {
   RTT_deviation = 0;   // Start with no deviation ( units are clock ticks )
 
 
-  // Experimental: Used to shrink the receive window on bad connections.
+  // Flow control: Used to shrink the receive window on bad connections.
 
   consecutiveGoodPackets = 0;
   consecutiveSeqErrs = 0;
@@ -1173,7 +1173,14 @@ int8_t near TcpSocket::sendPacket( TcpBuffer *buf ) {
     buf->setWasAckOnly( );
   }
 
-  // Available window size
+  // Compute our available window size.
+  //
+  // If using a receive buffer then the window is the unused portion of the
+  // receive buffer.
+  //
+  // If not, the window is arbitrarily set to four full packets worth where each
+  // packet is the Maximum Segment Size (MSS) for the socket.
+
   uint16_t winSize;
   if ( rcvBufSize ) {
     winSize = rcvBufSize - rcvBufEntries;
@@ -1182,14 +1189,33 @@ int8_t near TcpSocket::sendPacket( TcpBuffer *buf ) {
     winSize = (TcpSocketMgr::MSS_to_advertise<<2);
   }
 
-
-  // Experimental: If this socket is repeatedly stumbling it might be
-  // because the other side only sends the packet reported lost, not the
-  // next packets after it.  Selective ACK would help that but for now
-  // just reduce the window size.
+  // When an incoming packet is lost we will detect it and send the expected
+  // ACK number for the missing data.  This will cause the other side to
+  // resend that, but depending it may not send the following packets.  When
+  // that happens you basically wind up timing out on every packet and forcing
+  // resends for every packet, which is very hard to recover from.
+  //
+  // This code attempts to break that cycle by temporarily reducing the
+  // advertised window size.  The smaller window forces the sender to send
+  // just one packet at a time, which hurts throughput but eliminates the
+  // problem when there is more than one packet outstanding.  We do this
+  // until things clear up, and then resume using the correct window size.
+  //
+  // As per RFC 793, advertising a window and the advertisign a much smaller
+  // window is known as "shrinking the window" and it is "strongly discouraged."
+  // What we are doing here can be seen as anti-social, but it's also an
+  // exceptional error handling case.  To handle it properly we need to remember
+  // the last advertised window size, hope the client tried to fill it, and then
+  // not regrow it as this side consumes the receive buffer.  Doing that correctly
+  // is more trouble than its worth.
 
   if ( reportSmallWindow ) {
-    winSize = TcpSocketMgr::MSS_to_advertise;
+    winSize = winSize >> 1;
+    // If the new window size is larger than a packet, cut down to one packet.
+    // If it is smaller than a packet then we are fine.
+    if ( winSize > TcpSocketMgr::MSS_to_advertise ) {
+      winSize = TcpSocketMgr::MSS_to_advertise;
+    }
   }
 
 
@@ -1755,8 +1781,6 @@ void near Tcp::process2( uint8_t *packet, IpHeader *ip, TcpHeader *tcp, TcpSocke
 
       // We can safely remove packets from the sent queue.
       if ( socket->sent.entries ) {
-        // Small optimization - don't call unless we know there are
-        // packets on the queue.
         socket->removeSentPackets( incomingAckNum );
 
       }
@@ -1768,10 +1792,16 @@ void near Tcp::process2( uint8_t *packet, IpHeader *ip, TcpHeader *tcp, TcpSocke
       // It might also be a pure ack in response to a probe that we
       // sent, so don't assume that we have removed sent packets from
       // the queue.  (ie: don't put this in the if check above.
+      //
+      // We could compute the remote window by taking what they just
+      // told us in this packet and subtracting the sent but unAcked
+      // bytes from it.  That might give us slightly more opportunity
+      // to send data, but given that most of the machines we are going
+      // to be talking to have far larger windows it really doesn't
+      // matter and it's not worth the effort.
       if ( socket->sent.entries == 0 ) {
         socket->remoteWindow = remoteWindow;
       }
-
 
 
       // Process data first before possible state changes.  If we get into
@@ -1922,7 +1952,20 @@ void near Tcp::process2( uint8_t *packet, IpHeader *ip, TcpHeader *tcp, TcpSocke
     } // end if incoming seq and ack nums are acceptable.
 
     else {
+
+
       // Error path.
+      //
+      // If the incoming SEQ number doesn't match our ack number then
+      // a packet has been lost in transit to us.  We won't process this
+      // packet and instead we'll send them an empty packet to tell
+      // them the sequence number we expect.  They will also eventually
+      // time out and resend the missing packet.
+      //
+      // If the incoming ACK number doesn't match our SEQ number then one
+      // of the packets we sent got lost or is still in transit.  The
+      // retransmit timer will take care of it.
+
       socket->sendPureAck( );
       Tcp::Packets_SeqOrAckError++;
 
@@ -2364,9 +2407,16 @@ int16_t TcpSocket::recv( uint8_t *userBuf, uint16_t userBufLen ) {
 
 // send
 //
-// This is safe to call even with no data.
-
-
+// Copy the user supplied data into outgoing packets that are queued for
+// sending.
+//
+// This function is not guaranteed to send all of the supplied data.  We
+// might run out of outgoing buffers or the remote side might have too
+// small of a send window.  The user is reponsibile for checking the
+// return code, and if not all of the data was sent they need to try
+// to send the remaining data later.
+//
+// This is safe to call even with no data.  It just won't do anything.
 
 int16_t TcpSocket::send( uint8_t *userBuf, uint16_t userBufLen ) {
 
@@ -2378,6 +2428,8 @@ int16_t TcpSocket::send( uint8_t *userBuf, uint16_t userBufLen ) {
     return TCP_RC_BAD;
   }
 
+  // If they don't have room don't attempt to do anything.
+  if ( remoteWindow == 0 ) return 0;
 
   uint16_t bytesSent = 0;
 
@@ -2388,7 +2440,8 @@ int16_t TcpSocket::send( uint8_t *userBuf, uint16_t userBufLen ) {
     TcpBuffer *tmp = TcpBuffer::getXmitBuf( );
     if ( tmp == NULL ) break;
 
-    uint16_t cpyLen = maxEnqueueSize;
+    uint16_t cpyLen = getSuggestedSendSize( );
+
     if ( userBufLen - bytesSent < cpyLen ) cpyLen = userBufLen - bytesSent;
 
     uint8_t *dataStart = ((uint8_t *)tmp) + sizeof( TcpBuffer );

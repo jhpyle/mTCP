@@ -2,7 +2,7 @@
 /*
 
    mTCP Patch.cpp
-   Copyright (C) 2010-2020 Michael B. Brutman (mbbrutman@gmail.com)
+   Copyright (C) 2010-2022 Michael B. Brutman (mbbrutman@gmail.com)
    mTCP web page: http://www.brutman.com/mTCP
 
 

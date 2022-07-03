@@ -1,7 +1,7 @@
 /*
 
    mTCP Sample.cpp
-   Copyright (C) 2011-2020 Michael B. Brutman (mbbrutman@gmail.com)
+   Copyright (C) 2011-2022 Michael B. Brutman (mbbrutman@gmail.com)
    mTCP web page: http://www.brutman.com/mTCP
 
 
@@ -94,7 +94,7 @@ void __interrupt __far ctrlCHandler( ) {
 
 int main( int argc, char *argv[] ) {
 
-  fprintf( stderr, "mTCP Sample program by M Brutman (mbbrutman@gmail.com) (C)opyright 2012-2020\n\n" );
+  fprintf( stderr, "mTCP Sample program by M Brutman (mbbrutman@gmail.com) (C)opyright 2012-2022\n\n" );
 
   // Read command line arguments
   parseArgs( argc, argv );

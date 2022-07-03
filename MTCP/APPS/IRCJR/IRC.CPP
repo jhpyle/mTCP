@@ -1,7 +1,7 @@
 /*
 
    mTCP Irc.cpp
-   Copyright (C) 2008-2020 Michael B. Brutman (mbbrutman@gmail.com)
+   Copyright (C) 2008-2022 Michael B. Brutman (mbbrutman@gmail.com)
    mTCP web page: http://www.brutman.com/mTCP
 
 
@@ -323,7 +323,7 @@ static char Msg_JoinedChannel[] = "You joined channel %s\n";
 
 
 
-static char CopyrightMsg1[] = "mTCP IRCjr by M Brutman (mbbrutman@gmail.com) (C)opyright 2008-2020\n";
+static char CopyrightMsg1[] = "mTCP IRCjr by M Brutman (mbbrutman@gmail.com) (C)opyright 2008-2022\n";
 static char CopyrightMsg2[] = "Version: " __DATE__ "\n\n";
 
 

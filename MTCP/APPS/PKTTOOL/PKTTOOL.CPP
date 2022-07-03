@@ -1,7 +1,7 @@
 /*
 
    mTCP pkttool.cpp
-   Copyright (C) 2012-2020 Michael B. Brutman (mbbrutman@gmail.com)
+   Copyright (C) 2012-2022 Michael B. Brutman (mbbrutman@gmail.com)
    mTCP web page: http://www.brutman.com/mTCP
 
 
@@ -115,7 +115,7 @@ void ( __interrupt __far *oldCtrlBreakHandler)( );
 const char *BadPacketDriverErrMsg = "Error initializing packet driver - was that the correct software interrupt?";
 const char *BadHandleErrMsg = "Bad handle: Int: 0x%x, Handle: %x\n";
 
-const char CopyrightMsg[] = "\nmTCP pkttool by M Brutman (mbbrutman@gmail.com) (C)opyright 2012-2020\nVersion: " __DATE__ "\n";
+const char CopyrightMsg[] = "\nmTCP pkttool by M Brutman (mbbrutman@gmail.com) (C)opyright 2012-2022\nVersion: " __DATE__ "\n";
 
 int main( int argc, char *argv[] ) {
 

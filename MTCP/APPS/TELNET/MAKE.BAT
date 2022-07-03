@@ -6,4 +6,5 @@ del telnet.map
 del misc.obj
 del utils.obj
 del keys.obj
-wmake telnet.exe config=T.CFG
+wmake config=T.CFG
+wmake patch

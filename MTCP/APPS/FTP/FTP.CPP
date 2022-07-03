@@ -1,7 +1,7 @@
 /*
 
    mTCP Ftp.cpp
-   Copyright (C) 2009-2020 Michael B. Brutman (mbbrutman@gmail.com)
+   Copyright (C) 2009-2022 Michael B. Brutman (mbbrutman@gmail.com)
    mTCP web page: http://www.brutman.com/mTCP
 
 
@@ -370,7 +370,7 @@ const char NoMatches_msg[] = "No names on the remote server matched.";
 const char Spaces[] = "                                        ";
 
 
-static char CopyrightMsg[] = "mTCP FTP by M Brutman (mbbrutman@gmail.com) (C)opyright 2008-2020\nVersion: " __DATE__ "\n";
+static char CopyrightMsg[] = "mTCP FTP by M Brutman (mbbrutman@gmail.com) (C)opyright 2008-2022\nVersion: " __DATE__ "\n";
 
 int main( int argc, char *argv[] ) {
 
@@ -2633,10 +2633,15 @@ int8_t sendFile( void ) {
     }
 
 
-    // Don't bother trying to send packets if we don't have room
-    // for new packets in the outgoing queue.
+    // Snapshot their remote window size so we can estimate it while sending packets.
+    uint16_t estRemoteWindow = DataSocket->remoteWindow;
 
-    while ( DataSocket->outgoing.hasRoom( ) ) {
+
+    // Don't bother trying to send packets if we don't have room for new
+    // packets in the outgoing queue or if the other side has closed
+    // their window.
+
+    while ( (DataSocket->outgoing.hasRoom( )) && (estRemoteWindow > 0) ) {
 
       if ( CtrlBreakDetected ) {
         done = 3;
@@ -2664,10 +2669,19 @@ int8_t sendFile( void ) {
 
         // Read file data directly into one of our outgoing TCP buffers.
         //
-        // maxEnqueueSize is the lesser of the other side's MSS and our MSS.
-        // (Both of those take MTU into account.)
+        // You must use the lesser of our MSS, their MSS, and their window size.
+        // No need to check for their window being 0; that was covered in the
+        // while loop condition.
+        //
+        // (maxEnqueueSize is the lesser of the other side's MSS and our MSS.
+        // Both of those take MTU into account.)
 
-        uint16_t bytesToSend = fread( buf->data, 1, DataSocket->maxEnqueueSize, sourceFile );
+        uint16_t maxBytesToSend = DataSocket->maxEnqueueSize;
+        if ( maxBytesToSend > estRemoteWindow) {
+          maxBytesToSend = estRemoteWindow;
+        }
+
+        uint16_t bytesToSend = fread( buf->data, 1, maxBytesToSend, sourceFile );
 
         if ( bytesToSend == 0 ) {
 
@@ -2712,6 +2726,7 @@ int8_t sendFile( void ) {
         break;
       }
 
+      estRemoteWindow = estRemoteWindow - buf->b.dataLen;
       totalBytesSent += buf->b.dataLen;
 
       PACKET_PROCESS_MULT(5);
@@ -3266,7 +3281,7 @@ int readConsole( char *buffer, int bufLen, bool enableCmdEdit ) {
               drawCursor( startX, startY, bufferIdx );
               cputs( buffer + bufferIdx );
               putch( ' ' );
-	      gotoxy( startX, startY );
+              gotoxy( startX, startY );
 
             }
             else {

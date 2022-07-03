@@ -1,7 +1,7 @@
 /*
 
    mTCP Sntp.cpp
-   Copyright (C) 2010-2020 Michael B. Brutman (mbbrutman@gmail.com)
+   Copyright (C) 2010-2022 Michael B. Brutman (mbbrutman@gmail.com)
    mTCP web page: http://www.brutman.com/mTCP
 
 
@@ -22,12 +22,18 @@
 
 
    Description: Your typical run-of-the-mill SNTP (simple network time
-     protocol client) ...
+     protocol client).  DOS is kind of limited by the system timer,
+     which only has a resolution of 55ms.  So don't go overboard on
+     the accuracy because it just doesn't matter.  Getting to within
+     a few dozen milliseconds of a public NTP server is more than
+     good enough.
 
    Changes:
 
    2011-05-27: Initial release as open source software
    2015-01-18: Minor change to Ctrl-Break and Ctrl-C handling.
+   2022-01-22: Use the NTP fractional seconds to set the time just
+               a little more accurately.
 
 */
 
@@ -51,9 +57,9 @@
 #include "dns.h"
 #include "timer.h"
 
+#include "sntp.h"
 
 
-#define UNIX_OFFSET (2208988800ul)
 #define SERVER_ADDR_NAME_LEN (80)
 
 
@@ -67,7 +73,10 @@ uint16_t Retries = 2;
 uint8_t  Verbose = 0;
 uint8_t  SetTime = 0;
 
-time_t   TargetTime = 0;
+
+// Set by the NTP UDP handler when a response is received.
+time_t   TargetTimeSecs = 0;   // Seconds, Coordinated Universal Time
+uint32_t TargetTimeFrac = 0;   // Fractional seconds, NTP format
 
 
 
@@ -83,38 +92,13 @@ void __interrupt __far ctrlBreakHandler( ) {
 
 
 
-
 typedef struct {
+  UdpPacket_t udpHdr;   // Space for Ethernet, IP and UDP headers.
+  NTP_packet_t ntp;     // Actual NTP data.
+} NTP_UDP_packet_t;
 
-  UdpPacket_t udpHdr;   // Space for Ethernet, IP and UDP headers
+NTP_UDP_packet_t OutgoingRequest;
 
-  uint8_t  mode;
-  uint8_t  stratum;
-  uint8_t  poll;
-  uint8_t  precision;
-
-  uint32_t rootDelay;
-  uint32_t rootDispersion;
-
-  uint32_t refId;
-
-  uint32_t refTimeSecs;
-  uint32_t refTimeFrac;
-
-  uint32_t origTimeSecs;  // Client: put time here
-  uint32_t origTimeFrac;
-
-  uint32_t recvTimeSecs;
-  uint32_t recvTimeFrac;
-
-  uint32_t transTimeSecs; 
-  uint32_t transTimeFrac;
-
-} NTP_packet_t;
-
-
-
-NTP_packet_t Outgoing;
 
 
 // Function prototypes
@@ -130,22 +114,25 @@ void ntpUdpHandler( const unsigned char *packet, const UdpHeader *udp );
 
 char printTimeStampBuffer[40];
 
-char * printTimeStamp( uint32_t ts, uint16_t local ) {
+char * printTimeStamp( uint32_t ts_p, uint32_t frac, bool localTime ) {
 
-  time_t ts1 = ts;
+  // This uses NTP format, so if you print a DOS timestamp you have to
+  // convert it to the NTP format first.
+
+  time_t ts = ts_p;
 
   struct tm tmbuf;
 
-  if ( local ) {
-    _localtime( &ts1, &tmbuf );
+  if ( localTime ) {
+    _localtime( &ts, &tmbuf );
   }
   else {
-    _gmtime( &ts1, &tmbuf );
+    _gmtime( &ts, &tmbuf );
   }
 
-  sprintf( printTimeStampBuffer, "%04d-%02d-%02d %02d:%02d:%02d",
+  sprintf( printTimeStampBuffer, "%04d-%02d-%02d %02d:%02d:%02d.%03d",
           tmbuf.tm_year+1900, tmbuf.tm_mon+1, tmbuf.tm_mday,
-          tmbuf.tm_hour, tmbuf.tm_min, tmbuf.tm_sec );
+          tmbuf.tm_hour, tmbuf.tm_min, tmbuf.tm_sec, (frac / 1048) >> 12 );
 
   return printTimeStampBuffer;
 
@@ -160,7 +147,7 @@ int16_t setDosDateTime( void ) {
   struct dostime_t dos_time;
 
 
-  time_t ts1 = TargetTime;
+  time_t ts1 = TargetTimeSecs;
 
   struct tm tmbuf;
   _localtime( &ts1, &tmbuf );
@@ -174,7 +161,7 @@ int16_t setDosDateTime( void ) {
   dos_time.hour = tmbuf.tm_hour;
   dos_time.minute = tmbuf.tm_min;
   dos_time.second = tmbuf.tm_sec;
-  dos_time.hsecond = 50;
+  dos_time.hsecond = uint32_t((TargetTimeFrac / 10480)) >> 12; // NTP fractional to 1/100ths
 
   int rc2 = _dos_settime( &dos_time );
 
@@ -185,7 +172,7 @@ int16_t setDosDateTime( void ) {
 
 
 
-static char CopyrightMsg1[] = "mTCP SNTP Client by M Brutman (mbbrutman@gmail.com) (C)opyright 2009-2020\n";
+static char CopyrightMsg1[] = "mTCP SNTP Client by M Brutman (mbbrutman@gmail.com) (C)opyright 2009-2022\n";
 static char CopyrightMsg2[] = "Version: " __DATE__ "\n\n";
 
 
@@ -317,7 +304,7 @@ int main( int argc, char *argv[] ) {
 
     clockTicks_t startTime = TIMER_GET_CURRENT( );
 
-    while ( TargetTime == 0 ) {
+    while ( TargetTimeSecs == 0 ) {
 
       if ( Timer_diff( startTime, TIMER_GET_CURRENT( ) ) > TIMER_MS_TO_TICKS( TimeoutSecs ) ) {
         TRACE_WARN(( "Sntp: Timeout waiting for sntp response\n" ));
@@ -330,12 +317,12 @@ int main( int argc, char *argv[] ) {
 
     }
 
-    if ( TargetTime ) break;
+    if ( TargetTimeSecs ) break;
 
   }
   
 
-  if ( TargetTime && SetTime ) {
+  if ( TargetTimeSecs && SetTime ) {
     int rc = setDosDateTime( );
     if ( rc == 0 ) {
       printf( "\nSystem time set to new value\n" );
@@ -346,7 +333,7 @@ int main( int argc, char *argv[] ) {
     }
   }
   else {
-    puts( "\nSystem time has not been updated" );
+    puts( "\nSystem time has not been updated." );
   }
 
 
@@ -463,23 +450,37 @@ void shutdown( int rc ) {
 int8_t sendRequest( void ) {
 
   // Setup outgoing packet
-  memset( &Outgoing, 0, sizeof(Outgoing) );
+  memset( &OutgoingRequest, 0, sizeof(OutgoingRequest) );
 
-  Outgoing.mode = 0xdb;
-  Outgoing.transTimeSecs = time( NULL );
+  // Get the current time.  We use time() to get Coordinated Universal Time
+  // and _dos_gettime to get the fraction of a second.  They are both based
+  // on the same time, just the timezone offset is different between them.
+  // (_dos_gettime is local time.)
+
+  struct dostime_t dos_time;
+  _dos_gettime( &dos_time );
+
+  OutgoingRequest.ntp.leapIndicator = 3;  // Unknown or unset
+  OutgoingRequest.ntp.version = 3;        // Version = 3
+  OutgoingRequest.ntp.mode = 3;           // Mode = Client
+
+  OutgoingRequest.ntp.transTimeSecs = time( NULL );
+  OutgoingRequest.ntp.transTimeFrac = (uint32_t(dos_time.hsecond) * 10480) << 12;
 
   if ( Verbose ) {
-    printf( "Outgoing transmit time: %s\n", printTimeStamp( Outgoing.transTimeSecs, 0 ) );
+    printf( "Outgoing transmit time: %s\n",
+            printTimeStamp( OutgoingRequest.ntp.transTimeSecs, OutgoingRequest.ntp.transTimeFrac, false ) );
   }
 
-  Outgoing.transTimeSecs = htonl( Outgoing.transTimeSecs +  UNIX_OFFSET );
+  OutgoingRequest.ntp.transTimeSecs = htonl( OutgoingRequest.ntp.transTimeSecs +  NTP_OFFSET );
+  OutgoingRequest.ntp.transTimeFrac = htonl( OutgoingRequest.ntp.transTimeFrac );
 
-  uint16_t reqLen = sizeof( Outgoing ) - sizeof( UdpPacket_t );
+  uint16_t reqLen = sizeof( OutgoingRequest.ntp );
 
   clockTicks_t startTime = TIMER_GET_CURRENT( );
 
   int rc = Udp::sendUdp( ServerAddr, 1024, ServerPort, reqLen,
-                         (uint8_t *)&Outgoing, 1 );
+                         (uint8_t *)&OutgoingRequest, 1 );
 
   if ( rc == -1 ) return -1;
 
@@ -496,7 +497,7 @@ int8_t sendRequest( void ) {
     Arp::driveArp( );
 
     rc = Udp::sendUdp( ServerAddr, 1024, ServerPort, reqLen,
-                       (uint8_t *)&Outgoing, 1 );
+                       (uint8_t *)&OutgoingRequest, 1 );
 
     if ( rc == -1 ) return -1;
 
@@ -511,7 +512,7 @@ int8_t sendRequest( void ) {
 
 void ntpUdpHandler( const unsigned char *packet, const UdpHeader *udp ) {
 
-  NTP_packet_t *ntp = (NTP_packet_t *)(packet);
+  NTP_packet_t *ntp = &(((NTP_UDP_packet_t *)(packet))->ntp);
 
   // Quick sanity check
 
@@ -523,37 +524,92 @@ void ntpUdpHandler( const unsigned char *packet, const UdpHeader *udp ) {
       printf( "  Leap indicator: %d\n", (ntp->mode & 0xc0) >> 6 );
       printf( "  Version number: %d\n", (ntp->mode & 0x38) >> 3 );
       printf( "  Stratum:        %d\n", ntp->stratum );
-      printf( "  Reference ts:   %s UTC\n", printTimeStamp( ntohl( ntp->refTimeSecs ) - UNIX_OFFSET, 0 ) );
-      printf( "  Original ts:    %s UTC\n", printTimeStamp( ntohl( ntp->origTimeSecs ) - UNIX_OFFSET, 0 ) );
-      printf( "  Receive ts:     %s UTC\n", printTimeStamp( ntohl( ntp->recvTimeSecs ) - UNIX_OFFSET, 0 ) );
-      printf( "  Transmit ts:    %s UTC\n", printTimeStamp( ntohl( ntp->transTimeSecs ) - UNIX_OFFSET, 0 ) );
+      printf( "  Reference ts:   %s UTC\n", printTimeStamp( ntohl( ntp->refTimeSecs ) - NTP_OFFSET, ntohl(ntp->refTimeFrac), false ) );
+      printf( "  Original ts:    %s UTC\n", printTimeStamp( ntohl( ntp->origTimeSecs ) - NTP_OFFSET, ntohl(ntp->origTimeFrac), false ) );
+      printf( "  Receive ts:     %s UTC\n", printTimeStamp( ntohl( ntp->recvTimeSecs ) - NTP_OFFSET, ntohl(ntp->recvTimeFrac), false ) );
+      printf( "  Transmit ts:    %s UTC\n", printTimeStamp( ntohl( ntp->transTimeSecs ) - NTP_OFFSET, ntohl(ntp->transTimeFrac), false ) );
 
     }
+
+
+    // What we are doing here is taking the transmit timestamp from the
+    // server and using it directly, which is wrong.  We are supposed
+    // to generate a new local timestamp (Destination Timestamp) and then
+    // compute a few deltas to arrive at the adjustment that we need.
+    //
+    // This is DOS. We are going to use what they gave us directly since
+    // we know the standard timer resolution on the machine is at best
+    // 55ms.
  
-    TargetTime = ntohl( ntp->transTimeSecs ) - UNIX_OFFSET;
+    TargetTimeSecs = ntohl( ntp->transTimeSecs ) - NTP_OFFSET;
+    TargetTimeFrac = ntohl( ntp->transTimeFrac );
 
 
-    time_t timeDifference;
-    time_t currentTime = time( NULL );
+    // Difference calculation.
+
+    // Convert NTP fraction to milliseconds
+    uint16_t targetFrac = uint16_t((TargetTimeFrac / 1048) >> 12);
+
+
+    struct dostime_t dos_time;
+    _dos_gettime( &dos_time );
+
+    time_t   currentTime = time( NULL );
+    uint16_t currentFrac = dos_time.hsecond * 10;
+
+    time_t   diffSecs;
+    uint16_t diffFrac = 0;
+
+
+    if ( currentTime > TargetTimeSecs ) {
+
+      diffSecs = currentTime - TargetTimeSecs;
+
+      if ( currentFrac > targetFrac ) {
+        diffFrac = currentFrac - targetFrac;
+      } else {
+        diffSecs--;
+        diffFrac = (1000 + currentFrac) - targetFrac;
+      }
+
+    } else if ( TargetTimeSecs > currentTime ) {
+
+      diffSecs = TargetTimeSecs - currentTime;
+
+      if ( targetFrac > currentFrac ) {
+        diffFrac = targetFrac - currentFrac;
+      } else {
+        diffSecs--;
+        diffFrac = (1000 + targetFrac) - currentFrac;
+      }
+
+    } else {
+
+      diffSecs = 0;
+
+      if ( currentFrac > targetFrac ) {
+        diffFrac = currentFrac - targetFrac;
+      } else {
+        diffFrac = targetFrac - currentFrac;
+      }
+
+    }
+
+
 
     printf( "\nYour selected timezone is: %s\n", tzname[0] );
 
-    printf( "\nCurrent system time is: %s\n", printTimeStamp( currentTime, 1 ) );
-    printf( "Time should be set to:  %s\n\n", printTimeStamp(  TargetTime, 1 ) );
+    printf( "\nCurrent system time is: %s\n", printTimeStamp( currentTime, (uint32_t(dos_time.hsecond) * 10480) << 12 , true ) );
+    printf( "Time should be set to:  %s\n\n", printTimeStamp(  TargetTimeSecs, TargetTimeFrac, true ) );
 
-    if ( currentTime > TargetTime ) {
-      timeDifference = currentTime - TargetTime;
-    }
-    else {
-      timeDifference = TargetTime - currentTime;
-    }
-
-    if ( timeDifference < 600 ) {
-      printf( "Difference between suggested time and system time is: %lu seconds\n", timeDifference );
+    if ( ((diffSecs * 1000) + diffFrac) < 600000 ) {
+      printf( "Difference between suggested time and system time is: %lu.%03u seconds\n", diffSecs, diffFrac );
     }
     else {
       puts( "Difference between suggested time and system time is greater than 10 minutes!" );
     }
+
+    puts( "(Remember, the smallest increment of time for DOS is 55 milliseconds.)" );
 
 
   }

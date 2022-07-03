@@ -32,18 +32,18 @@
 
 name MISC
 
-LDOWN equ 1
-RDOWN equ 2
-LUP equ 4
-RUP equ 8
-MDOWN equ 16
-MUP equ 32
-INDEX_REG equ 0x03B4
-DATA_REG equ 0x03B5
-DISPLAY_CTL equ 0x03B8
-CONFIG_SW equ 0x03BF
-VIDEO_SEG equ 0xB800		; address of second page
-VIDEO_SIZE equ 0x4000		; number of words in the 32k page
+LDOWN 		equ 1
+RDOWN 		equ 2
+LUP 		equ 4
+RUP 		equ 8
+MDOWN 		equ 16
+MUP 		equ 32
+INDEX_REG 	equ 0x03B4
+DATA_REG 	equ 0x03B5
+DISPLAY_CTL 	equ 0x03B8
+CONFIG_SW 	equ 0x03BF
+VIDEO_SEG 	equ 0xB800		; address of second page
+VIDEO_SIZE 	equ 0x4000		; number of words in the 32k page
 
 ifdef __SMALL__
   ; near code, near data
@@ -75,18 +75,8 @@ else
   endif
 endif
 
-;; DGROUP group _DATA
-;; _DATA segment word public 'DATA' use16
-;; _DATA ends
-
-;; extrn _mouse_changed:BYTE
-;; extrn _left_pressed:BYTE
-;; extrn _right_pressed:BYTE
-;; extrn _middle_pressed:BYTE
-
 _TEXT segment para public 'CODE' use16
-assume cs:_TEXT
-;; ,ds:_TEXT,ss:_TEXT,es:_TEXT ;
+assume cs:_TEXT,ds:_TEXT,ss:_TEXT,es:_TEXT ;
 
 public _mouse_changed
 _mouse_changed	db 0
@@ -125,8 +115,7 @@ old_col  	dw -1
 
 gtable		db 0x35, 0x2D, 0x2E, 0x07, 0x5B, 0x02, 0x57, 0x57, 0x02, 0x03, 0x00, 0x00
 ttable		db 0x61, 0x50, 0x52, 0x0F, 0x19, 0x06, 0x19, 0x19, 0x02, 0x0D, 0x0B, 0x0C
-
-;; extern  "C", MouseMoveDetected:byte
+lpt1		dw 0000h
 
 public _ibm_mouse_init
 
@@ -162,32 +151,6 @@ _ibm_mouse_hide proc far
 
 _ibm_mouse_hide endp
 
-;; public _ibm_mouse_get_status
-
-;; _ibm_mouse_get_status proc far
-
-;; 	push    bp
-;; 	mov     bp,sp
-
-;; 	push    ds
-;; 	push    si
-
-;; 	mov     ax, 3
-;; 	int     0x33
-;; 	mov     di, [bp+X]
-;; 	mov     [di], bx
-;; 	mov     di, [bp+X+4]
-;; 	mov     [di], cx
-;; 	mov     di, [bp+X+8]
-;; 	mov     [di], dx
-;; 	pop     si
-;; 	pop     ds
-;; 	pop     bp
-;; 	ret
-
-;; _ibm_mouse_get_status endp
-
-
 public _ibm_mouse_get_time
 
 _ibm_mouse_get_time proc far
@@ -196,7 +159,6 @@ _ibm_mouse_get_time proc far
 	mov     bp,sp
 
 	push    ds
-	push    si
 	push    di
 	push    cx
 	push    dx
@@ -210,7 +172,6 @@ _ibm_mouse_get_time proc far
 	pop     dx
 	pop     cx
 	pop     di
-	pop     si
 	pop     ds
 	pop     bp
 	ret
@@ -228,10 +189,6 @@ _ibm_mouse_install proc far
 	push    dx
 	push    di
 	push    si
-
-	;; mov 	dl, 41h
-	;; mov 	ah, 2
-	;; int 	21h
 
 	mov 	ax, 21h
 	int 	33h
@@ -295,30 +252,7 @@ _ibm_mouse_uninstall proc far
 
 _ibm_mouse_uninstall endp
 
-;; _ibm_mouse_handler proc far
-;; 	push 	es
-;;	 push    cs
-;;	 pop     ds
-;; 	mov 	_mouse_changed, 1
-;; 	test    bl, 1
-;; 	jz      @@checkright
-;; 	mov	_left_pressed, 1
-;; @@checkright:
-;; 	test    bl, 2
-;; 	jz      @@checkmiddle
-;; 	mov	_right_pressed, 1
-;; @@checkmiddle:
-;; 	test    bl, 4
-;; 	jz      @@checkedall
-;; 	mov	_middle_pressed, 1
-;; @@checkedall:
-;; 	pop es
-;; 	ret
-
-;; _ibm_mouse_handler endp
-
 _ibm_mouse_handler proc far
-	push 	es
 	push 	ds
 	push    ax
 	push    bx
@@ -391,7 +325,6 @@ _ibm_mouse_handler proc far
 	pop 	bx
 	pop 	ax
 	pop 	ds
-	pop 	es
 	ret
 
 _ibm_mouse_handler endp
@@ -405,9 +338,6 @@ _start_graphics proc far
 	mov     bp,sp
 	push    ds
 	push    si
-
-	push    cs 		;data segment is this segment
-	pop     ds
 
 	lds     si, [bp+X]
 	mov     al, [ds:si]
@@ -669,7 +599,9 @@ _write_cga_graphics proc far
 	mov     bp,sp
 
 	push    ds
+	push	es
 	push    si
+	push	di
 	push	cx
 
 	cli
@@ -683,7 +615,9 @@ _write_cga_graphics proc far
 	sti
 
 	pop	cx
+	pop	di
 	pop     si
+	pop	es
 	pop     ds
 	pop     bp
 	ret
@@ -699,6 +633,118 @@ _stop_graphics proc far
 	ret
 
 _stop_graphics endp
+
+public _initialize_printer
+
+_initialize_printer proc far
+
+	push    bp
+	mov     bp,sp
+
+	push    ds
+	push    es
+	push    si
+	push	bx
+	push    cx
+	push	dx
+
+	xor	ax, ax
+	mov	ds, ax
+	mov     dx, ds:0408h    ; get base address of first parallel port from BIOS
+	push	cs
+	pop	ds
+	mov     lpt1, dx
+	add	dx, 2		; tell control register we are initializing
+	mov	al, 00001000b
+	;;		|| |____ Strobe (off)
+	;;		||______ INIT (on)
+	;; 		|_______ SLCT IN (on)
+	out	dx, al
+	jmp	short $+2
+	push	dx
+	mov	ah, 0		; read timer counter
+	int	1ah
+	add	dx, 2
+	mov	bx, dx		; bx holds two ticks in future
+_delay:
+	int	1ah
+	cmp	dx, bx		; are we two ticks in the future yet?
+	jb	_delay		; if not, keep polling
+	pop	dx		; tell control register we are no longer initializing
+	mov	al, 00001100b
+	;;		|| |____ Strobe (off)
+	;;		||______ INIT (off)
+	;; 		|_______ SLCT IN (on)
+	out	dx, al
+	jmp	short $+2
+	lds     si, [bp+X]
+_lploop:
+	mov	al, ds:[si]
+	cmp	al, 0
+	jz	_endlp
+	call	_lpchar
+	inc	si
+	jmp	_lploop
+_endlp:
+	pop	dx
+	pop     cx
+	pop	bx
+	pop     si
+	pop	es
+	pop     ds
+	pop     bp
+	ret
+
+_initialize_printer endp
+
+_lpchar:			; send ASCII character in al to printer
+	push	ds
+	push	cs
+	pop	ds
+	mov     dx, lpt1	; put ASCII character on data line
+	pop	ds
+	out	dx, al
+	jmp 	short $+2
+	inc	dx
+_chk:				; wait for printer to not be busy
+	in	al, dx
+	test	al, 10000000b
+	jz	_chk
+
+	inc	dx		; strobe the printer so it reads the character
+	mov	al, 00001101b
+	;;		|| |____ Strobe (on)
+	;;		||______ INIT (off)
+	;; 		|_______ SLCT IN (on)
+	out	dx, al
+	jmp	short $+2
+	mov	al, 00001100b
+	;;		|| |____ Strobe (off)
+	;;		||______ INIT (off)
+	;; 		|_______ SLCT IN (on)
+	out	dx, al
+	jmp	short $+2
+	ret
+
+public _send_char_to_printer
+
+_send_char_to_printer proc far
+
+	push    bp		; send ASCII character in al to printer
+	mov     bp,sp
+	push	ds
+	push	dx
+	push	si
+	lds     si, [bp+X]
+	mov	al, ds:[si]
+	call 	_lpchar
+	pop	si
+	pop	dx
+	pop	ds
+	pop	bp
+	ret
+
+_send_char_to_printer endp
 
 _TEXT ends
 

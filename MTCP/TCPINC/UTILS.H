@@ -1,7 +1,7 @@
 /*
 
    mTCP Utils.H
-   Copyright (C) 2006-2020 Michael B. Brutman (mbbrutman@gmail.com)
+   Copyright (C) 2006-2022 Michael B. Brutman (mbbrutman@gmail.com)
    mTCP web page: http://www.brutman.com/mTCP
 
 
@@ -239,6 +239,7 @@ class Utils {
     static uint32_t  timeDiff( DosTime_t startTime, DosTime_t endTime );
     static char     *getNextToken( char *input, char *target, uint16_t bufLen );
     static bool      rtrim( char *nullTerminatedString );
+    static int       mystrncpy( char *target, const char *source, uint16_t bufLen );
 
 
     // Used by the DHCP client to set the desired packet software interrupt
@@ -271,11 +272,14 @@ class Utils {
 
 extern const char Parm_PacketInt[];
 extern const char Parm_Hostname[];
+extern const char Parm_Domain[];
 extern const char Parm_IpAddr[];
 extern const char Parm_Gateway[];
 extern const char Parm_Netmask[];
 extern const char Parm_Nameserver[];
 extern const char Parm_Nameserver_preferred[];
 extern const char Parm_Mtu[];
+extern const char Parm_HostsFilename[];
+extern const char Parm_DHCPLeaseRequest[];
 
 #endif

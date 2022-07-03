@@ -1,7 +1,7 @@
 /*
 
    mTCP Tcp.H
-   Copyright (C) 2006-2020 Michael B. Brutman (mbbrutman@gmail.com)
+   Copyright (C) 2006-2022 Michael B. Brutman (mbbrutman@gmail.com)
    mTCP web page: http://www.brutman.com/mTCP
 
 
@@ -373,7 +373,7 @@ class TcpSocket {
     uint16_t RTT_deviation;  // Deviation ( units are clock ticks )
 
 
-    // Experimental: used to shrink the receive window on bad connections.
+    // Flow control: used to tempoarily shrink the receive window on bad connections.
     uint8_t  consecutiveGoodPackets;
     uint8_t  consecutiveSeqErrs;
     bool     reportSmallWindow;
@@ -431,6 +431,14 @@ class TcpSocket {
     }
 
     inline bool outgoingQueueIsFull( void ) { return !outgoing.hasRoom( ); }
+
+    inline uint16_t getSuggestedSendSize( void ) {
+      if ( maxEnqueueSize < remoteWindow ) {
+        return maxEnqueueSize;  // Remote window is good, send the biggest packet we can.
+      } else {
+        return remoteWindow;    // Remote window is small, limit ourselves
+      }
+    }
 
     // Almost should be private: alternative to send
     int16_t enqueue( TcpBuffer *buf );    // Send data

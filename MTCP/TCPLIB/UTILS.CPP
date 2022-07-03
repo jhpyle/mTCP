@@ -1,7 +1,7 @@
 /*
 
    mTCP Utils.cpp
-   Copyright (C) 2006-2020 Michael B. Brutman (mbbrutman@gmail.com)
+   Copyright (C) 2006-2022 Michael B. Brutman (mbbrutman@gmail.com)
    mTCP web page: http://www.brutman.com/mTCP
 
 
@@ -114,12 +114,15 @@ uint8_t mTCP_releaseTimesliceEnabled = 0;
 
 const char Parm_PacketInt[]            = "PACKETINT";
 const char Parm_Hostname[]             = "HOSTNAME";
+const char Parm_Domain[]               = "DOMAIN";
 const char Parm_IpAddr[]               = "IPADDR";
 const char Parm_Gateway[]              = "GATEWAY";
 const char Parm_Netmask[]              = "NETMASK";
 const char Parm_Nameserver[]           = "NAMESERVER";
 const char Parm_Nameserver_preferred[] = "NAMESERVER_PREFERRED";
 const char Parm_Mtu[]                  = "MTU";
+const char Parm_HostsFilename[]        = "HOSTSFILE";
+const char Parm_DHCPLeaseRequest[]     = "DHCP_LEASE_REQUEST_SECS";
 
 
 
@@ -234,7 +237,6 @@ bool Utils::rtrim( char *buffer ) {
 }
 
 
-
 // Read a line from a text file.  If there is a read error or the line is
 // truncated then return an error.
 
@@ -339,21 +341,21 @@ int8_t Utils::parseEnv( void ) {
     if ( stricmp( parmName, Parm_PacketInt ) == 0 ) {
       int rc = sscanf( nextTokenPtr, "%x", &packetInt );
       if ( rc != 1 ) {
-	errorParm = Parm_PacketInt;
+        errorParm = Parm_PacketInt;
       }
     }
 
     else if ( stricmp( parmName, Parm_Hostname ) == 0 ) {
       int rc = sscanf( nextTokenPtr, "%s", MyHostname );
       if ( rc != 1 ) {
-	errorParm = Parm_Hostname;
+        errorParm = Parm_Hostname;
       }
     }
 
     else if ( stricmp( parmName, Parm_IpAddr ) == 0 ) {
       int rc = sscanf( nextTokenPtr, "%d.%d.%d.%d\n", &tmp1, &tmp2, &tmp3, &tmp4 );
       if ( rc != 4 ) {
-	errorParm = Parm_IpAddr;
+        errorParm = Parm_IpAddr;
       }
       Ip::setMyIpAddr( tmp1, tmp2, tmp3, tmp4 );
     }
@@ -361,7 +363,7 @@ int8_t Utils::parseEnv( void ) {
     else if ( stricmp( parmName, Parm_Netmask ) == 0 ) {
       int rc = sscanf( nextTokenPtr, "%d.%d.%d.%d\n", &tmp1, &tmp2, &tmp3, &tmp4 );
       if ( rc != 4 ) {
-	errorParm = Parm_Netmask;
+        errorParm = Parm_Netmask;
       }
       Ip::setMyNetmask( tmp1, tmp2, tmp3, tmp4 );
     }
@@ -369,7 +371,7 @@ int8_t Utils::parseEnv( void ) {
     else if ( stricmp( parmName, Parm_Gateway ) == 0 ) {
       int rc = sscanf( nextTokenPtr, "%d.%d.%d.%d\n", &tmp1, &tmp2, &tmp3, &tmp4 );
       if ( rc != 4 ) {
-	errorParm = Parm_Gateway;
+        errorParm = Parm_Gateway;
       }
       Gateway[0] = tmp1; Gateway[1] = tmp2;
       Gateway[2] = tmp3; Gateway[3] = tmp4;
@@ -380,7 +382,7 @@ int8_t Utils::parseEnv( void ) {
     else if ( stricmp( parmName, Parm_Nameserver ) == 0 ) {
       int rc = sscanf( nextTokenPtr, "%d.%d.%d.%d\n", &tmp1, &tmp2, &tmp3, &tmp4 );
       if ( rc != 4 ) {
-	errorParm = Parm_Nameserver;
+        errorParm = Parm_Nameserver;
       }
       Dns::NameServer[0] = tmp1; Dns::NameServer[1] = tmp2;
       Dns::NameServer[2] = tmp3; Dns::NameServer[3] = tmp4;
@@ -388,11 +390,23 @@ int8_t Utils::parseEnv( void ) {
     else if ( stricmp( parmName, Parm_Nameserver_preferred ) == 0 ) {
       int rc = sscanf( nextTokenPtr, "%d.%d.%d.%d\n", &tmp1, &tmp2, &tmp3, &tmp4 );
       if ( rc != 4 ) {
-	errorParm = Parm_Nameserver_preferred;
+        errorParm = Parm_Nameserver_preferred;
       }
       Preferred_nameserver[0] = tmp1; Preferred_nameserver[1] = tmp2;
       Preferred_nameserver[2] = tmp3; Preferred_nameserver[3] = tmp4;
       Preferred_nameserver_set = true;
+    }
+    else if ( stricmp( parmName, Parm_Domain ) == 0 ) {
+      int rc = sscanf( nextTokenPtr, "%s", Dns::Domain );
+      if ( rc != 1 ) {
+        errorParm = Parm_Domain;
+      }
+    }
+    else if ( stricmp( parmName, Parm_HostsFilename ) == 0 ) {
+      int rc = sscanf( nextTokenPtr, "%s", Dns::HostsFilename );
+      if ( rc != 1 ) {
+        errorParm = Parm_HostsFilename;
+      }
     }
     #endif
 
@@ -400,7 +414,7 @@ int8_t Utils::parseEnv( void ) {
       uint16_t newMtu;
       int rc = sscanf( nextTokenPtr, "%d\n", &newMtu );
       if ( (rc != 1) || (newMtu < ETH_MTU_MIN) || (newMtu > ETH_MTU_MAX) ) {
-	errorParm = Parm_Mtu;
+        errorParm = Parm_Mtu;
       }
       MyMTU = newMtu;
     }
@@ -448,12 +462,8 @@ int8_t Utils::parseEnv( void ) {
     errorParm = Parm_PacketInt;
   }
 
-  if ( Ip::isSame( MyIpAddr, IpBroadcast ) ) {
+  if ( Ip::isSame( MyIpAddr, IpBroadcastNonRoutable ) ) {
     errorParm = Parm_IpAddr;
-  }
-
-  if ( Ip::isSame( Netmask, IpBroadcast ) ) {
-    errorParm = Parm_Netmask;
   }
 
 
@@ -541,10 +551,7 @@ void Utils::parseOptionalEnvVars( void ) {
     if ( (Trace_Debugging & 0xFF) == 0 ) Trace_Debugging = 0;
   }
 
-  char *logfile = getenv( "LOGFILE" );
-  if ( logfile != NULL ) {
-    strcpy( Trace_LogFile, logfile );
-  }
+  Trace_LogFile = getenv( "LOGFILE" );
 
   #endif
 
@@ -637,10 +644,10 @@ int8_t Utils::getAppValue( const char *key, char *val, uint16_t valBufLen ) {
     while ( 1 ) {
       if ( *nextTokenPtr == 0 ) break;
       if ( isspace(*nextTokenPtr) ) {
-	nextTokenPtr++;
+        nextTokenPtr++;
       }
       else {
-	break;
+        break;
       }
     }
 
@@ -794,15 +801,15 @@ int8_t Utils::initStack( uint8_t tcpSockets,
     Trace_tprintf( "mTCP " MTCP_PROGRAM_NAME " Version: " __DATE__ "\n" );
 
     Trace_tprintf( "  %s=0x%x MAC=%02X.%02X.%02X.%02X.%02X.%02X %s=%d\n",
-	           Parm_PacketInt, packetInt,
-	           MyEthAddr[0], MyEthAddr[1], MyEthAddr[2],
-	           MyEthAddr[3], MyEthAddr[4], MyEthAddr[5],
-	           Parm_Mtu, MyMTU );
+                   Parm_PacketInt, packetInt,
+                   MyEthAddr[0], MyEthAddr[1], MyEthAddr[2],
+                   MyEthAddr[3], MyEthAddr[4], MyEthAddr[5],
+                   Parm_Mtu, MyMTU );
 
     Trace_tprintf( "  %s=%d.%d.%d.%d %s=%d.%d.%d.%d %s=%d.%d.%d.%d\n",
-	          Parm_IpAddr, MyIpAddr[0], MyIpAddr[1], MyIpAddr[2], MyIpAddr[3],
-	          Parm_Netmask, Netmask[0], Netmask[1], Netmask[2], Netmask[3],
-	          Parm_Gateway, Gateway[0], Gateway[1], Gateway[2], Gateway[3] );
+                  Parm_IpAddr, MyIpAddr[0], MyIpAddr[1], MyIpAddr[2], MyIpAddr[3],
+                  Parm_Netmask, Netmask[0], Netmask[1], Netmask[2], Netmask[3],
+                  Parm_Gateway, Gateway[0], Gateway[1], Gateway[2], Gateway[3] );
 
     uint16_t dosv = dosVersion( );
 
@@ -863,7 +870,7 @@ int8_t Utils::initStack( uint8_t tcpSockets,
 
   #ifdef COMPILE_DNS
 
-    if ( Dns::init( DNS_HANDLER_PORT ) ) {
+    if ( Dns::init( ) ) {
       fprintf( stderr, InitErrorMsg, "DNS" );
       endStack( );
       return -1;
@@ -931,7 +938,7 @@ int8_t Utils::initStack( uint8_t tcpSockets,
   clockTicks_t lastCheck;
   startTime = lastCheck = TIMER_GET_CURRENT( );
 
-  while ( Timer_diff( startTime, TIMER_GET_CURRENT( ) ) < TIMER_MS_TO_TICKS( ARP_TIMEOUT ) ) {
+  while ( Timer_diff( startTime, TIMER_GET_CURRENT( ) ) < TIMER_MS_TO_TICKS( ARP_TIMEOUT_FAST ) ) {
 
     if ( Arp::resolve( MyIpAddr, tmpEthAddr ) == 0 ) {
       fprintf( stderr, "Init: IP address conflict!\nA machine with MAC address %02x:%02x:%02x:%02x:%02x:%02x is already using %d.%d.%d.%d\n",
@@ -1077,10 +1084,10 @@ uint32_t Utils::timeDiff( struct dostime_t startTime, struct dostime_t endTime )
 
   uint32_t rc;
   uint32_t st = startTime.hsecond + startTime.second * 100l +
-		startTime.minute * 6000l + startTime.hour * 360000l;
+                startTime.minute * 6000l + startTime.hour * 360000l;
 
   uint32_t et = endTime.hsecond + endTime.second * 100l +
-		endTime.minute * 6000l + endTime.hour * 360000l;
+                endTime.minute * 6000l + endTime.hour * 360000l;
 
   if ( et < st ) {
     rc = (et + 8640000l) - st;

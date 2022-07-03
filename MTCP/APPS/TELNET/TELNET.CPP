@@ -1,7 +1,7 @@
 /*
 
    mTCP Telnet.cpp
-   Copyright (C) 2009-2020 Michael B. Brutman (mbbrutman@gmail.com)
+   Copyright (C) 2009-2022 Michael B. Brutman (mbbrutman@gmail.com)
    mTCP web page: http://www.brutman.com/mTCP
 
 
@@ -529,6 +529,7 @@ uint8_t reverse=0;
 
 int16_t saved_cursor_x = 0, saved_cursor_y = 0;
 
+uint8_t Strict_DOS_Mode = 0;
 
 
 uint8_t ColorScheme = 0;  // 0 default, 1 = CGA_MONO
@@ -604,7 +605,7 @@ Mouse_t mouse;          // Mouse status
 static char tmpBuf[160];
 
 
-static char CopyrightMsg1[] = "mTCP Telnet by M Brutman (mbbrutman@gmail.com) (C)opyright 2009-2020\r\n";
+static char CopyrightMsg1[] = "mTCP Telnet by M Brutman (mbbrutman@gmail.com) (C)opyright 2009-2022\r\n";
 static char CopyrightMsg2[] = "Version: " __DATE__ "\r\n\r\n";
 
 extern "C" uint16_t cdecl initialize_printer( char far *initstring );
@@ -988,7 +989,12 @@ int main( int argc, char *argv[] ) {
   #endif
 
 
+  // Cheap hack to change behavior without making yet another configuration parameter.
 
+  if ( getenv("TELNET_STRICT_DOS") ) {
+    Strict_DOS_Mode = 1;
+  }
+  
 
 
 
@@ -1174,10 +1180,6 @@ int main( int argc, char *argv[] ) {
           s.printerReadIndex = 0;
         }
         send_char_to_printer(&(s.printerBuffer[s.printerReadIndex]));
-        // if ( s.printerReadIndex == s.printerWriteIndex && s.AutoPrint == 0 && s.printerFile != NULL ){
-        //   fclose( s.printerFile );
-        //   s.printerFile = NULL;
-        // }
       }
     }
 
@@ -1194,133 +1196,59 @@ int main( int argc, char *argv[] ) {
 
     if ( UserInputMode == UserInputMode_t::Telnet ) { gotoxy( s.cursor_x, s.cursor_y ); }
 
-    if ( needToSendSelection ) {
-      send_selection();
-      needToSendSelection = false;
-    }
-
-    if ( mouse.pending > 0 ) {
-      ibm_mouse_get_time(&currentTime);
-      currentTimeIsGood = true;
-      ticks = currentTime - mouse.prev_down;
-      if ( mouse.pending & MOUSE_LEFT ) {
-        //if ( ticks >= MOUSE_TICKS_DOUBLE_CLICK ) {
-        if ( ticks >= MOUSE_TICKS_MIDDLE_CLICK ) {
-          //printf("L DOWN DELAYED\r\n");
-          send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_LEFT);
-          mouse.buttons |= 1;
-          mouse.pending &= ~MOUSE_LEFT;
-          mouse.prev_down = 0;
+    if ( mouse.installed ) {
+      if ( needToSendSelection ) {
+        send_selection();
+        needToSendSelection = false;
+      }
+      if ( mouse.pending > 0 ) {
+        ibm_mouse_get_time(&currentTime);
+        currentTimeIsGood = true;
+        ticks = currentTime - mouse.prev_down;
+        if ( mouse.pending & MOUSE_LEFT ) {
+          if ( ticks >= MOUSE_TICKS_MIDDLE_CLICK ) {
+            send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_LEFT);
+            mouse.buttons |= 1;
+            mouse.pending &= ~MOUSE_LEFT;
+            mouse.prev_down = 0;
+          }
+        }
+        if ( mouse.pending & MOUSE_RIGHT ) {
+          if ( ticks >= MOUSE_TICKS_MIDDLE_CLICK ) {
+            send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_RIGHT);
+            mouse.buttons |= 2;
+            mouse.pending &= ~MOUSE_RIGHT;
+            mouse.prev_down = 0;
+          }
         }
       }
-      if ( mouse.pending & MOUSE_RIGHT ) {
-        if ( ticks >= MOUSE_TICKS_MIDDLE_CLICK ) {
-          //printf("R DOWN DELAYED\r\n");
-          send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_RIGHT);
-          mouse.buttons |= 2;
-          mouse.pending &= ~MOUSE_RIGHT;
-          mouse.prev_down = 0;
+      else {
+        currentTimeIsGood = false;
+      }
+      if ( mouse_changed ) {
+        mouse_changed = 0;
+        if ( !mouse.should_show ) {
+          mouse.should_show = true;
+          mouse_show();
         }
-      }
-      // if ( mouse.pending & MOUSE_DOUBLE_START ) {
-      //         if ( ticks >= MOUSE_TICKS_DOUBLE_CLICK ) {
-      //           //printf("L UP DELAYED\r\n");
-      //           send_click(XTERM_BUTTON_UP, XTERM_BUTTON_LEFT);
-      //     mouse.buttons &= ~1;
-      //           mouse.pending &= ~MOUSE_DOUBLE_START;
-      //           mouse.prev_down = 0;
-      //         }
-      // }
-    }
-    else {
-      currentTimeIsGood = false;
-    }
-
-    //gets itself into a state where double click testing is not done; it does L DOWN DELAYED immediately
-    //after left mouse button goes down
-    if ( mouse_changed && mouse.installed ) {
-      mouse_changed = 0;
-      if ( !mouse.should_show ) {
-        mouse.should_show = true;
-        mouse_show();
-      }
-      if (currentTimeIsGood) {
-        lastMouseTime = currentTime;
-      }
-      else {
-        ibm_mouse_get_time(&lastMouseTime);
-      }
-      send_move();
-      if ( buffer_start == buffer_end ) {
-      }
-      else {
-        while (1) {
-          if (buffer_start == 0) {
-            buffer_prev = 15;
-          }
-          else {
-            buffer_prev = buffer_start - 1;
-          }
-          if (mouse.pending && (buffer_row[buffer_start] != buffer_row[buffer_prev] || buffer_col[buffer_start] != buffer_col[buffer_prev]) && buffer_row[buffer_prev] != 255) {
-            if ( mouse.pending & 1 ) {
-              send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_LEFT);
-              mouse.buttons |= 1;
-              mouse.pending &= ~1;
+        if (currentTimeIsGood) {
+          lastMouseTime = currentTime;
+        }
+        else {
+          ibm_mouse_get_time(&lastMouseTime);
+        }
+        send_move();
+        if ( buffer_start == buffer_end ) {
+        }
+        else {
+          while (1) {
+            if (buffer_start == 0) {
+              buffer_prev = 15;
             }
-            if ( mouse.pending & 2 ) {
-              send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_RIGHT);
-              mouse.buttons |= 2;
-              mouse.pending &= ~2;
+            else {
+              buffer_prev = buffer_start - 1;
             }
-            send_move();
-          }
-          mouse.row = buffer_row[buffer_start] + 1;
-          mouse.column = buffer_col[buffer_start] + 1;
-          button_change = buffer_buttons[buffer_start] ^ buffer_buttons[buffer_prev];
-
-          if ( button_change > 0 ) {
-            buttons_down = buffer_buttons[buffer_start] & button_change;
-            buttons_up = (~buffer_buttons[buffer_start]) & button_change;
-            if ( buttons_down & 3 ) { // left and/or right down
-              currentTime = (buffer_time_cx[buffer_start] << 16) + buffer_time_dx[buffer_start];
-              ticks = currentTime - mouse.prev_down;
-
-              // if ( ticks < MOUSE_TICKS_DOUBLE_CLICK && ( buttons_down & 1 ) && ( mouse.prev_buttons & 1 )) {
-              //         // double click
-              //   if ( mouse.pending & MOUSE_DOUBLE_START ) {
-              //           mouse.pending &= ~MOUSE_DOUBLE_START;
-              //         }
-              //         //printf("DC down\r\n");
-              //   send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_LEFT);
-              //         mouse.buttons |= 1;
-              //         mouse.prev_down = 0;
-              //         mouse.pending &= ~1;
-              // }
-              if ( ( ( buttons_down & 3 ) == 3 ) || ( ticks < MOUSE_TICKS_MIDDLE_CLICK && (( buttons_down ^ mouse.prev_buttons ) & 3 ) == 3 ) ) {
-                // middle click
-                // send middle down
-                //printf("M DOWN\r\n");
-                send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_MIDDLE);
-                mouse.buttons |= 4;
-                //final_buttons_down &= ~3; // don't send
-                //final_buttons_down |= 4; // artificial middle
-                mouse.next_up_is_middle_up = true;
-                mouse.prev_down = 0;
-                mouse.pending &= ~3;
-              }
-              else {
-                mouse.pending |= (buttons_down & 3);
-                mouse.prev_down = currentTime;
-              }
-              mouse.prev_buttons = buttons_down;
-            }
-            if ( buttons_down & MOUSE_MIDDLE ) {
-              //printf("M DOWN NATURAL\r\n");
-              send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_MIDDLE);
-              mouse.buttons |= 4;
-            }
-            if ( (buttons_up & 3) == 3 ) {
-              //printf("M UP\r\n");
+            if (mouse.pending && (buffer_row[buffer_start] != buffer_row[buffer_prev] || buffer_col[buffer_start] != buffer_col[buffer_prev]) && buffer_row[buffer_prev] != 255) {
               if ( mouse.pending & 1 ) {
                 send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_LEFT);
                 mouse.buttons |= 1;
@@ -1331,91 +1259,151 @@ int main( int argc, char *argv[] ) {
                 mouse.buttons |= 2;
                 mouse.pending &= ~2;
               }
-              if ( mouse.buttons & 4 ) {
-                send_click(XTERM_BUTTON_UP, XTERM_BUTTON_MIDDLE);
-              }
-              else {
-                send_click(XTERM_BUTTON_UP, XTERM_BUTTON_LEFT);
-                send_click(XTERM_BUTTON_UP, XTERM_BUTTON_RIGHT);
-              }
-              mouse.buttons &= ~7;
-              mouse.next_up_is_middle_up = false;
+              send_move();
             }
-            else {
-              if ( buttons_up & MOUSE_LEFT ) {
-                // currentTime = (buffer_time_cx[buffer_start] << 16) + buffer_time_dx[buffer_start];
-                // ticks = currentTime - mouse.prev_down;
-                // if ( ticks < 9) {
-                //   mouse.pending |= MOUSE_DOUBLE_START;
+            mouse.row = buffer_row[buffer_start] + 1;
+            mouse.column = buffer_col[buffer_start] + 1;
+            button_change = buffer_buttons[buffer_start] ^ buffer_buttons[buffer_prev];
+
+            if ( button_change > 0 ) {
+              buttons_down = buffer_buttons[buffer_start] & button_change;
+              buttons_up = (~buffer_buttons[buffer_start]) & button_change;
+              if ( buttons_down & 3 ) { // left and/or right down
+                currentTime = (buffer_time_cx[buffer_start] << 16) + buffer_time_dx[buffer_start];
+                ticks = currentTime - mouse.prev_down;
+
+                // if ( ticks < MOUSE_TICKS_DOUBLE_CLICK && ( buttons_down & 1 ) && ( mouse.prev_buttons & 1 )) {
+                //         // double click
+                //   if ( mouse.pending & MOUSE_DOUBLE_START ) {
+                //           mouse.pending &= ~MOUSE_DOUBLE_START;
+                //         }
+                //         //printf("DC down\r\n");
+                //   send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_LEFT);
+                //         mouse.buttons |= 1;
+                //         mouse.prev_down = 0;
+                //         mouse.pending &= ~1;
                 // }
-                // else {
+                if ( ( ( buttons_down & 3 ) == 3 ) || ( ticks < MOUSE_TICKS_MIDDLE_CLICK && (( buttons_down ^ mouse.prev_buttons ) & 3 ) == 3 ) ) {
+                  // middle click
+                  // send middle down
+                  //printf("M DOWN\r\n");
+                  send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_MIDDLE);
+                  mouse.buttons |= 4;
+                  //final_buttons_down &= ~3; // don't send
+                  //final_buttons_down |= 4; // artificial middle
+                  mouse.next_up_is_middle_up = true;
+                  mouse.prev_down = 0;
+                  mouse.pending &= ~3;
+                }
+                else {
+                  mouse.pending |= (buttons_down & 3);
+                  mouse.prev_down = currentTime;
+                }
+                mouse.prev_buttons = buttons_down;
+              }
+              if ( buttons_down & MOUSE_MIDDLE ) {
+                //printf("M DOWN NATURAL\r\n");
+                send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_MIDDLE);
+                mouse.buttons |= 4;
+              }
+              if ( (buttons_up & 3) == 3 ) {
+                //printf("M UP\r\n");
                 if ( mouse.pending & 1 ) {
-                  //printf("L DOWN (ACCEL)\r\n");
                   send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_LEFT);
                   mouse.buttons |= 1;
                   mouse.pending &= ~1;
                 }
-                if (mouse.ignore_next_left_up) {
-                  mouse.ignore_next_left_up = false;
-                }
-                else if (mouse.next_up_is_middle_up) {
-                  //printf("M UP\r\n");
-                  send_click(XTERM_BUTTON_UP, XTERM_BUTTON_MIDDLE);
-                  mouse.buttons &= ~4;
-                  mouse.next_up_is_middle_up = false;
-                  mouse.ignore_next_right_up = true;
-                }
-                else {
-                  //printf("L UP\r\n");
-                  send_click(XTERM_BUTTON_UP, XTERM_BUTTON_LEFT);
-                  mouse.buttons &= ~1;
-                }
-              }
-              if ( buttons_up & MOUSE_RIGHT ) {
                 if ( mouse.pending & 2 ) {
-                  //printf("R DOWN (ACCEL)\r\n");
                   send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_RIGHT);
                   mouse.buttons |= 2;
                   mouse.pending &= ~2;
                 }
-                if (mouse.ignore_next_right_up) {
-                  mouse.ignore_next_right_up = false;
-                }
-                else if (mouse.next_up_is_middle_up) {
-                  //printf("M UP\r\n");
+                if ( mouse.buttons & 4 ) {
                   send_click(XTERM_BUTTON_UP, XTERM_BUTTON_MIDDLE);
-                  mouse.buttons &= ~4;
-                  mouse.next_up_is_middle_up = false;
-                  mouse.ignore_next_left_up = true;
                 }
                 else {
-                  //printf("R UP\r\n");
+                  send_click(XTERM_BUTTON_UP, XTERM_BUTTON_LEFT);
                   send_click(XTERM_BUTTON_UP, XTERM_BUTTON_RIGHT);
-                  mouse.buttons &= ~2;
+                }
+                mouse.buttons &= ~7;
+                mouse.next_up_is_middle_up = false;
+              }
+              else {
+                if ( buttons_up & MOUSE_LEFT ) {
+                  // currentTime = (buffer_time_cx[buffer_start] << 16) + buffer_time_dx[buffer_start];
+                  // ticks = currentTime - mouse.prev_down;
+                  // if ( ticks < 9) {
+                  //   mouse.pending |= MOUSE_DOUBLE_START;
+                  // }
+                  // else {
+                  if ( mouse.pending & 1 ) {
+                    //printf("L DOWN (ACCEL)\r\n");
+                    send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_LEFT);
+                    mouse.buttons |= 1;
+                    mouse.pending &= ~1;
+                  }
+                  if (mouse.ignore_next_left_up) {
+                    mouse.ignore_next_left_up = false;
+                  }
+                  else if (mouse.next_up_is_middle_up) {
+                    //printf("M UP\r\n");
+                    send_click(XTERM_BUTTON_UP, XTERM_BUTTON_MIDDLE);
+                    mouse.buttons &= ~4;
+                    mouse.next_up_is_middle_up = false;
+                    mouse.ignore_next_right_up = true;
+                  }
+                  else {
+                    //printf("L UP\r\n");
+                    send_click(XTERM_BUTTON_UP, XTERM_BUTTON_LEFT);
+                    mouse.buttons &= ~1;
+                  }
+                }
+                if ( buttons_up & MOUSE_RIGHT ) {
+                  if ( mouse.pending & 2 ) {
+                    //printf("R DOWN (ACCEL)\r\n");
+                    send_click(XTERM_BUTTON_DOWN, XTERM_BUTTON_RIGHT);
+                    mouse.buttons |= 2;
+                    mouse.pending &= ~2;
+                  }
+                  if (mouse.ignore_next_right_up) {
+                    mouse.ignore_next_right_up = false;
+                  }
+                  else if (mouse.next_up_is_middle_up) {
+                    //printf("M UP\r\n");
+                    send_click(XTERM_BUTTON_UP, XTERM_BUTTON_MIDDLE);
+                    mouse.buttons &= ~4;
+                    mouse.next_up_is_middle_up = false;
+                    mouse.ignore_next_left_up = true;
+                  }
+                  else {
+                    //printf("R UP\r\n");
+                    send_click(XTERM_BUTTON_UP, XTERM_BUTTON_RIGHT);
+                    mouse.buttons &= ~2;
+                  }
                 }
               }
+              if ( buttons_up & MOUSE_MIDDLE ) {
+                //printf("M UP NATURAL\r\n");
+                send_click(XTERM_BUTTON_UP, XTERM_BUTTON_MIDDLE);
+                mouse.buttons &= ~4;
+              }
             }
-            if ( buttons_up & MOUSE_MIDDLE ) {
-              //printf("M UP NATURAL\r\n");
-              send_click(XTERM_BUTTON_UP, XTERM_BUTTON_MIDDLE);
-              mouse.buttons &= ~4;
-            }
-          }
 
-          buffer_start = (buffer_start + 1) & 0x0f;
-          if (buffer_start == buffer_end) {
-            break;
+            buffer_start = (buffer_start + 1) & 0x0f;
+            if (buffer_start == buffer_end) {
+              break;
+            }
           }
         }
       }
-    }
-    else {
-      if (!currentTimeIsGood) {
-        ibm_mouse_get_time(&currentTime);
-      }
-      if ( ( currentTime - lastMouseTime ) > MOUSE_TICKS_SHOW_DURATION ) {
-        mouse.should_show = false;
-        mouse_hide();
+      else {
+        if (!currentTimeIsGood) {
+          ibm_mouse_get_time(&currentTime);
+        }
+        if ( ( currentTime - lastMouseTime ) > MOUSE_TICKS_SHOW_DURATION ) {
+          mouse.should_show = false;
+          mouse_hide();
+        }
       }
     }
 
@@ -3160,7 +3148,6 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
         traceBufferLen = 0;
 
         StreamState = CSI_SEEN;
-
       }
       else if ( recvBuffer[i] == ']' ) {
 
@@ -3181,7 +3168,6 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
         }
         g.reset();
         StreamState = DCS_SEEN;
-
       }
       else {
         // Esc char was eaten - return to normal processing.
@@ -4181,9 +4167,13 @@ void processAnsiCommand( uint8_t commandLetter ) {
         case 2: {
           s.clear( 0, 0, s.terminalCols-1, s.terminalLines-1 );
 
-          // Putty does not seem to home the cursor
-          // s.cursor_x = 0;
-          // s.cursor_y = 0;
+          // Strict ANSI behavior is to clear the screen, which is what Putty
+          // and XTERM do.  DOS ANSI.SYS also homes the cursor.  This is going
+          // to need a chicken switch.
+          if ( Strict_DOS_Mode ) {
+            s.cursor_x = 0;
+            s.cursor_y = 0;
+          }
           break;
         }
       }

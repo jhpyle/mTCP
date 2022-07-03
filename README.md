@@ -14,7 +14,7 @@ The binary is available as the [TELNET.EXE] file and the
 [TELNET88.EXE] file is for machines without [Enhanced Keyboard]
 support.
 
-The fork is based on the [mTCP-src_2020-03-07.zip] version of [mTCP].
+The fork is based on the [mTCP-src_2022-07-01.zip] version of [mTCP].
 
 ## The changes
 
@@ -185,7 +185,7 @@ Telnet will not do any image resizing or dithering.  If an image is
 wider or taller than the graphics mode supports, then it will not
 display.
 
-For best results, Telnet to a Linux machine and use the included
+For best results when connected to a Linux machine, use the included
 [show] script to convert an image file to [Sixel] escape sequences.
 This script calls the [`img2sixel`] command with the appropriate
 parameters for resizing images and converting colors.
@@ -282,7 +282,7 @@ or you can give it the name of one or more files:
     tprint foo.txt bar.txt
     tprint *.msg
 
-In addition, this repository contains two bash scripts, [startprint]
+In addition, this repository contains two [bash] scripts, [startprint]
 and [stopprint], which echo the escape sequences for turning printing
 on and off.  As explained in "Configuring your applications," below,
 you can also bind keys in [bash] for turning printing on and off.
@@ -311,6 +311,9 @@ As discussed above, you will need to add `TELNET_HGC 1` or
 `TELNET_CGA 1` to your `MTCP.CFG` file if you have a [Hercules
 Graphics Card] or [CGA] adapter in your system.
 
+[EGA] is currently not supported, because I do not known an [EGA] card
+or [EGA]-compatible monitor.
+
 ## Setup
 
 In order for your Telnet client and remote servers to communicate
@@ -337,9 +340,9 @@ of the features of this Telnet's ANSI terminal emulation, you need to
 create your own "terminfo" file.  This package contains the source
 code for this "terminfo" file ([ansi.src]).
 
-On every machine to which you might want to connect (directly with
-Telnet or indirectly with [ssh]), install the `ansi` "terminfo" file
-and the [show] script.
+On every Linux machine to which you might want to connect (directly
+with Telnet or indirectly with [ssh]), install the `ansi` "terminfo"
+file and the [show] script.
 
 You can do this by cloning the GitHub repository with `git` and
 running `./install.sh` as root.  If you don't have `git` installed,
@@ -419,7 +422,7 @@ manually, run commands equivalent to the following:
 ### Configuring your applications
 
 The "terminfo" file, on its own, is not sufficient for all of your
-applications to work appropriately with the Telnet client.  Many
+Linux applications to work appropriately with the Telnet client.  Many
 applications look at the `TERM` environment variable but bypass the
 "terminfo" system.  You will need to edit the configuration files of
 your applications to get the most out of Telnet.
@@ -645,7 +648,7 @@ both `TELNET88.EXE` and `TELNET.EXE`.  (See the file `MAKEALL.BAT`)
 [ssh]: https://en.wikipedia.org/wiki/Secure_Shell
 [bash]: https://en.wikipedia.org/wiki/Bash_(Unix_shell)
 [Diablo 630]: https://en.wikipedia.org/wiki/Diablo_630
-[mTCP-src_2020-03-07.zip]: http://www.brutman.com/mTCP/mTCP-src_2020-03-07.zip
+[mTCP-src_2022-07-01.zip]: http://www.brutman.com/mTCP/download/mTCP-src_2022-07-01.zip
 [first terminals]: https://en.wikipedia.org/wiki/Teletype_Model_33
 [VT52]: https://en.wikipedia.org/wiki/VT52
 [VT100]: https://en.wikipedia.org/wiki/VT100

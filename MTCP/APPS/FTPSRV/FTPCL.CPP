@@ -2,7 +2,7 @@
 /*
 
    mTCP FtpCl.cpp
-   Copyright (C) 2009-2020 Michael B. Brutman (mbbrutman@gmail.com)
+   Copyright (C) 2009-2022 Michael B. Brutman (mbbrutman@gmail.com)
    mTCP web page: http://www.brutman.com/mTCP
 
 
@@ -49,6 +49,7 @@ uint16_t FtpClient::allocatedClients = 0;
 
 
 extern IpAddr_t Pasv_IpAddr;
+extern char Pasv_Name[60];
 extern uint16_t Filebuffer_Size;
 
 

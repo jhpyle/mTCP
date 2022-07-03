@@ -1,7 +1,7 @@
 /*
 
    mTCP HTGet.cpp
-   Copyright (C) 2011-2020 Michael B. Brutman (mbbrutman@gmail.com)
+   Copyright (C) 2011-2022 Michael B. Brutman (mbbrutman@gmail.com)
    mTCP web page: http://www.brutman.com/mTCP
 
 
@@ -1171,7 +1171,7 @@ int readContent( void ) {
 
 
 
-static char CopyrightMsg1[] = "mTCP HTGet by M Brutman (mbbrutman@gmail.com) (C)opyright 2011-2020\n";
+static char CopyrightMsg1[] = "mTCP HTGet by M Brutman (mbbrutman@gmail.com) (C)opyright 2011-2022\n";
 static char CopyrightMsg2[] = "Version: " __DATE__ "\n\n";
 
 char *HelpText = {
