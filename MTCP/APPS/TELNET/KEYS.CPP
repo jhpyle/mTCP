@@ -234,4 +234,3 @@ Key_t getKey( void ) {
 
   return rc;
 }
-

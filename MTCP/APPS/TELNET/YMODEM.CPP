@@ -181,7 +181,7 @@ static uint16_t xmodem_calcCRC(uint8_t *ptr, int16_t count) {
 
 
 // Table lookup version of CRC algorithms.  Adapted from
-// http://www.barrgroup.com/Embedded-Systems/How-To/CRC-Calculation-C-Code 
+// http://www.barrgroup.com/Embedded-Systems/How-To/CRC-Calculation-C-Code
 
 
 static uint16_t crcTable[256];
@@ -291,7 +291,7 @@ static int8_t transfer_SendByte( uint8_t data ) {
     PACKET_PROCESS_SINGLE;
     Arp::driveArp( );
     Tcp::drivePackets( );
-    
+
   }
 
 
@@ -315,7 +315,7 @@ static int8_t transfer_SendByte( uint8_t data ) {
 
 
   // Great.  We have an outgoing buffer and we know we can send it.
-  
+
   buf->b.dataLen = 1;
   buf->data[0] = data;
 
@@ -503,7 +503,7 @@ void drawFileStatusWindow( void ) {
   else {
     s.myCprintf( 7, 11, scFileXfer, "Size: %lu", transferVars.expectedFilesize );
   }
-    
+
   char modDateStr[25];
   if ( transferVars.modificationDate ) {
     struct tm time_of_day;
@@ -661,7 +661,7 @@ Transfer_vars::ParseHeaderRc_t Transfer_vars::parseYmodemHeader( void ) {
 
   expectedFilesize = atoll( tmp );
 
-  
+
   // Scan ahead for the next space for the modification date.
   // Reset len to be relative to where tmp is so we can stop
   // the scan within a reasonable time.
@@ -782,7 +782,7 @@ void processUserInput_ClobberDialog( Key_t key ) {
 
   if ( key.specialKey != K_NormalKey ) return;
 
-  s.putch( 20, 17, scFileXfer, key.normalKey );  
+  s.putch( 20, 17, scFileXfer, key.normalKey );
 
   if ( UserInputMode == UserInputMode_t::ClobberDialog ) {
     if ( key.normalKey == 'Y' || key.normalKey == 'y' ) {
@@ -807,8 +807,8 @@ void processUserInput_ClobberDialog( Key_t key ) {
   }
 
 }
-    
-    
+
+
 
 
 
@@ -1173,7 +1173,7 @@ uint16_t Transfer_vars::processSocket_UploadInternal( uint8_t *recvBuffer, uint1
         telnetIACSeen = 0;
         endTransfer( false, false, "Telnet DataMark - done?" );
         return 1;
-      } 
+      }
       else {
 
         int16_t rc = processTelnetCmds( recvBuffer, len );
@@ -1293,7 +1293,7 @@ uint16_t Transfer_vars::processSocket_UploadInternal( uint8_t *recvBuffer, uint1
       else {
         // NAK or any other unexpected character
         retries++;
-        transmitPacket( );        
+        transmitPacket( );
       }
 
       break;
@@ -1314,7 +1314,7 @@ uint16_t Transfer_vars::processSocket_UploadInternal( uint8_t *recvBuffer, uint1
       else {
         // NAK or any other unexpected character - resend what we already have.
         retries++;
-        transmitPacket( );        
+        transmitPacket( );
       }
 
       break;
@@ -1371,7 +1371,7 @@ uint16_t Transfer_vars::processSocket_UploadInternal( uint8_t *recvBuffer, uint1
       else {
         // NAK or any other unexpected character
         retries++;
-        transmitPacket( );        
+        transmitPacket( );
       }
 
       break;
@@ -1459,7 +1459,7 @@ int8_t Transfer_vars::statFileForUpload( void ) {
 
   expectedFilesize = stat_buf.st_size;
   modificationDate = stat_buf.st_mtime;
-  
+
   return 0;
 }
 
@@ -1581,7 +1581,7 @@ inline void Transfer_vars::sendNullHeader( ) {
   transmitPacket( );
 
 }
-  
+
 
 
 

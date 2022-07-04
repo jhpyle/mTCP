@@ -88,8 +88,21 @@ no translation is available, a default character, `¿`, is printed.
 Unicode translation does not take place when sending outbound
 characters.
 
+It would be impossible to set up a translation for every possible
+Unicode character because that would require more than 640k just for
+the translation table. However, if there is a Unicode character that
+you would like to be supported, feel free to create a GitHub issue.
+
+If you are connected to server that sends "extended ASCII" characters
+(codes greater than 127) with the expectation that your Telnet client
+will display them directly to video memory (e.g., as [Code Page 437]
+character), this Telnet client will misinterpret these codes as the
+first byte of a Unicode sequence. Thus, you will get garbage on the
+screen. If you need to to connect to a server that sends "extended
+ASCII" characters, use the original mTCP.
+
 The [Code Page] and the default unprintable character are
-configuraable in the `MTCP.CFG` file using the directives
+configurable in the `MTCP.CFG` file using the directives
 `TELNET_UTF`, `TELNET_CODEPAGE`, and `TELNET_UTF_DEFAULT`.  For
 example, the following excerpt demonstrates enabling [Code Page 737]
 translation in place of the default [Code Page 437], and setting the
@@ -127,6 +140,10 @@ hexadecimal 8-bit number representing the character on the screen
 (e.g., `0x0d` for the musical note character).  Note that the
 `TELNET_CODEPAGE` directive will not have any effect in the absence of
 `TELNET_UTF` lines that define the translations for the code page.
+
+For best results, sort your `TELNET_UTF` lines by the Unicode
+numbers. If they are out of order, they will need to be sorted when
+Telnet starts, which extends the start time.
 
 The `TELNET_UTF_DEFAULT` directive indicates which character should be
 printed if there is no translation for a particular Unicode character.
@@ -313,6 +330,26 @@ Graphics Card] or [CGA] adapter in your system.
 
 [EGA] is currently not supported, because I do not known an [EGA] card
 or [EGA]-compatible monitor.
+
+## Performance
+
+This version of mTCP Telnet is not as fast as the official mTCP
+Telnet, so you may see that screens do not draw as fast.
+
+The reason for the slowness is due to the increased feature
+support. In the main loop of the Telnet application, there are more
+if/else statements that need to run in order to support additional
+incoming escape sequences, process multi-byte Unicode sequences,
+support the mouse feature, and support the printing feature.
+
+If the server you are connected to sends UTF-8 instead of [Code Page
+437] "extended ASCII" characters, it will send two or three bytes
+instead of one byte to draw one character, so screen draws may appear
+slower just because more bytes need to be transferred.
+
+If you can think of ways the code can run more efficiently while
+supporting the same set of features, feel free to create a GitHub pull
+request.
 
 ## Setup
 
@@ -589,8 +626,8 @@ both `TELNET88.EXE` and `TELNET.EXE`.  (See the file `MAKEALL.BAT`)
 
 [ansi.src]: https://github.com/jhpyle/mTCP/blob/master/ansi.src
 [MAKEFILE]: https://github.com/jhpyle/mTCP/blob/master/MTCP/APPS/TELNET/MAKEFILE
-[TELNET.EXE]: https://github.com/jhpyle/mTCP/blob/master/MTCP/APPS/TELNET/TELNET.EXE
-[TELNET88.EXE]: https://github.com/jhpyle/mTCP/blob/master/MTCP/APPS/TELNET/TELNET88.EXE
+[TELNET.EXE]: https://github.com/jhpyle/mTCP/blob/master/bin/telnet.exe
+[TELNET88.EXE]: https://github.com/jhpyle/mTCP/blob/master/bin/telnet88.exe
 [bin]: https://github.com/jhpyle/mTCP/blob/master/bin
 [mTCP]: https://www.brutman.com/
 [ansi.el]: https://github.com/jhpyle/mTCP/blob/master/ansi.el

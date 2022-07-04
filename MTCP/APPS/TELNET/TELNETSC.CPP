@@ -56,27 +56,6 @@
 //   fwrite( &character, 1, 1, printerFile );
 // }
 
-inline static uint8_t UTF8Decode( uint8_t *p, uint16_t *c ) {
-    uint8_t c0, c1, c2;
-
-    c0 = p[0];
-    if( c0 <= 0x7f ) {
-        *c = c0;
-        return( 1 );
-    }
-    c1 = p[1];
-    if( c0 < 0xe0 ) {
-        *c = (( c0 & 0x1f ) << 6 ) | ( c1 & 0x3f );
-        return( 2 );
-    }
-    c2 = p[2];
-    *c = (( c0 & 0x0f ) << 12 ) | (( c1 & 0x3f ) << 6 ) | ( c2 & 0x3f );
-    return( 3 );
-}
-
-
-
-
 // Virtual/Backscroll buffer
 //
 // Scrolling a terminal screen is very expensive, especially on older
@@ -765,64 +744,78 @@ void Screen::add( char *buf, uint16_t len ) {
   // Easier to just always update this here rather than branch if unnecessary
   updateVidBufPtr( );
 
-  for ( uint16_t i=0; i < len; i++ ) {
-
-    uint16_t utfcode;
-    uint8_t charType = UTF8Decode( (uint8_t *)(buf + i), &utfcode );
-
-    uint8_t c;
-    if (charType == 1) {
+  uint8_t charType;
+  uint8_t c;
+  for ( uint16_t i = 0; i < len; i++ ) {
+    bool isASCII = true;
+    if ( buf[i] < 0x80 ) {
       c = buf[i];
     }
-    else {
-      i += ( charType - 1 );
-      int j = 0;
-      while ( 1 ){
-        if ( transTable[j].utfChar == utfcode ){
-          c = transTable[j].screenChar;
-          break;
+    else{
+      isASCII = false;
+      uint32_t utfcode = 0;
+      if ( buf[i] < 0xe0 ) {
+        utfcode = (( (uint32_t)buf[i] & 0x1f ) << 6 ) | ( (uint32_t)buf[i + 1] & 0x3f );
+        i += 1;
+      }
+      else if ( buf[i] < 0xf0 ) {
+        utfcode = (( (uint32_t)buf[i] & 0x0f ) << 12 ) | (( (uint32_t)buf[i + 1] & 0x3f ) << 6 ) | ( (uint32_t)buf[i + 2] & 0x3f );
+        i += 2;
+      }
+      else {
+        utfcode = (( (uint32_t)buf[i] & 0x07 ) << 18 ) | (( (uint32_t)buf[i + 1] & 0x3f ) << 12 ) | (( (uint32_t)buf[i + 2] & 0x3f ) << 6 ) | ( (uint32_t)buf[i + 3] & 0x3f );
+        i += 3;
+      }
+      c = nonPrintable;
+      int j;
+      if (utfcode < transTable[transTableMidPoint].utfChar){
+        j = transTableMidPoint - 1;
+        while (j > 0){
+          if ( transTable[j].utfChar == utfcode ){
+            c = transTable[j].screenChar;
+            break;
+          }
+          j--;
         }
-        if ( ++j == transTableCount ) {
-          c = nonPrintable;
-          break;
+      }
+      else{
+        j = transTableMidPoint;
+        while (j < transTableCount){
+          if ( transTable[j].utfChar == utfcode ){
+            c = transTable[j].screenChar;
+            break;
+          }
+          j++;
         }
       }
     }
-
     if ( c == 0 ) {         // Null char
       // Do nothing
     }
-
-    else if ( charType == 1 && c == '\r' ) { // Carriage Return
+    else if ( c == '\r' && isASCII ){ // Carriage Return
       cursor_x = 0;
       overhang = false;
       updateVidBufPtr( );
     }
-
-    else if ( charType == 1 && c == '\n' ) { // Line Feed
+    else if ( c == '\n' && isASCII ) { // Line Feed
       scroll( );
       overhang = false;
       updateVidBufPtr( );
     }
-
-    else if ( charType == 1 && c == '\a' ) { // Attention/Bell
+    else if ( c == '\a' && isASCII ) { // Attention/Bell
       sound(1000); delay(100); nosound( );
     }
-
-    else if ( charType == 1 && c == '\t' ) { // Tab
+    else if ( c == '\t' && isASCII ) { // Tab
       overhang = false;
       uint16_t newCursor_x = (cursor_x + 8) & 0xF8;
       if ( newCursor_x < terminalCols ) cursor_x = newCursor_x;
       updateVidBufPtr( );
     }
-
-    else if ( charType == 1 && (c == 8 || c == 127) ) { // Backspace or Delete Char
-
+    else if ( (c == 8 || c == 127) && isASCII ) { // Backspace or Delete Char
       if ( overhang == true ) {
         overhang = false;
       }
       else {
-
         // Fixme: If this was delete char we really should blank it out.
 
         // Backspace across columns works in putty so we'll do it here.
@@ -838,11 +831,8 @@ void Screen::add( char *buf, uint16_t len ) {
         }
         updateVidBufPtr( );
       }
-
     }
-
-    else {
-
+    else{
       // Remember this in case we need to repeat the last char for an ANSI op
       lastChar = c;
 
@@ -902,7 +892,6 @@ void Screen::add( char *buf, uint16_t len ) {
       else {
         virtualUpdated = 1;
       }
-
     }
     if ( AutoPrint && c > 0 && c < 128 ){
       if ( ++printerWriteIndex >= PRINT_BUFFER_SIZE ){
@@ -916,9 +905,7 @@ void Screen::add( char *buf, uint16_t len ) {
       }
       printerBuffer[printerWriteIndex] = c;
     }
-
   } // end for
-
 
   // If we were keeping the real screen in sync then update the cursor
   // position.  If not, then note that the virtual screen has changed.

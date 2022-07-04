@@ -42,7 +42,7 @@
 
 #define MAX_SELECTION_SIZE 2000
 #define MAX_SELECTION_SIZE_PLUS 2048
-#define NUMBER_OF_DEFAULT_UTF_TRANSLATIONS 189
+#define NUMBER_OF_DEFAULT_UTF_TRANSLATIONS 190
 #define PRINT_BUFFER_SIZE  (4096)
 
 //#define BASE64_BUFFER_SIZE 3000
@@ -235,6 +235,7 @@ class Screen {
 
     utfTrans far *transTable;
     int      transTableCount;
+    int      transTableMidPoint;
     uint8_t  nonPrintable;
 
     uint8_t PrintingAllowed;

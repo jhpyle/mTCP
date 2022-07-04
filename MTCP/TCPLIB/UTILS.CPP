@@ -709,6 +709,27 @@ int16_t Utils::getUtfValues( char *codePage, utfTrans *transTable, int mode ) {
   return utfLines;
 }
 
+void Utils::sortUtfValues( utfTrans *transTable, int *tableLength ){
+  bool somethingChanged = true;
+  uint32_t utfChar;
+  uint8_t screenChar;
+  int i = 0;
+  int n = (*tableLength - 1);
+  while (somethingChanged){
+    somethingChanged = false;
+    for (i = 0; i < n; ++i){
+      if (transTable[i].utfChar > transTable[i + 1].utfChar){
+        utfChar = transTable[i].utfChar;
+        screenChar = transTable[i].screenChar;
+        transTable[i].utfChar = transTable[i + 1].utfChar;
+        transTable[i].screenChar = transTable[i + 1].screenChar;
+        transTable[i + 1].utfChar = utfChar;
+        transTable[i + 1].screenChar = screenChar;
+        somethingChanged = true;
+      }
+    }
+  }
+}
 
 // Utils::initStack
 //

@@ -146,195 +146,196 @@ uint8_t PrinterInitialized = 0;
 uint32_t ConnectTimeout = TELNET_CONNECT_TIMEOUT; // How many ms to wait for a connection
 
 utfTrans defaultTransTable[NUMBER_OF_DEFAULT_UTF_TRANSLATIONS] = {
-                                                                  { 0x263a, 0x01 },
-                                                                  { 0x263b, 0x02 },
-                                                                  { 0x2665, 0x03 },
-                                                                  { 0x2666, 0x04 },
-                                                                  { 0x2663, 0x05 },
-                                                                  { 0x2660, 0x06 },
-                                                                  { 0x25cf, 0x07 },
-                                                                  { 0x2022, 0x07 },
-                                                                  { 0x25d8, 0x08 },
-                                                                  { 0x25cb, 0x09 },
-                                                                  { 0x25d9, 0x0a },
-                                                                  { 0x2642, 0x0b },
-                                                                  { 0x2640, 0x0c },
-                                                                  { 0x266a, 0x0d },
-                                                                  { 0x266b, 0x0e },
-                                                                  { 0x263c, 0x0f },
-                                                                  { 0x25ba, 0x10 },
-                                                                  { 0x25c4, 0x11 },
-                                                                  { 0x2195, 0x12 },
-                                                                  { 0x2039, 0x3c },
-                                                                  { 0x203a, 0x3e },
-                                                                  { 0x203c, 0x13 },
-                                                                  { 0x00b6, 0x14 },
+                                                                  { 0x00a0, 0xff },
+                                                                  { 0x00a1, 0xad },
+                                                                  { 0x00a2, 0x9b },
+                                                                  { 0x00a3, 0x9c },
+                                                                  { 0x00a5, 0x9d },
                                                                   { 0x00a7, 0x15 },
-                                                                  { 0x25ac, 0x16 },
-                                                                  { 0x21ab, 0x17 },
-                                                                  { 0x2191, 0x18 },
-                                                                  { 0x2193, 0x19 },
-                                                                  { 0x2192, 0x1a },
-                                                                  { 0x2190, 0x1b },
-                                                                  { 0x221f, 0x1c },
-                                                                  { 0x2194, 0x1d },
-                                                                  { 0x25b2, 0x1e },
-                                                                  { 0x25bc, 0x1f },
-                                                                  { 0x201c, 0x22 },
-                                                                  { 0x201d, 0x22 },
+                                                                  { 0x00a9, 0x63 },
+                                                                  { 0x00aa, 0xa6 },
+                                                                  { 0x00ab, 0xae },
+                                                                  { 0x00ac, 0xaa },
+                                                                  { 0x00ae, 0x52 },
+                                                                  { 0x00b0, 0xf8 },
+                                                                  { 0x00b1, 0xf1 },
+                                                                  { 0x00b2, 0xfd },
+                                                                  { 0x00b5, 0xe6 },
+                                                                  { 0x00b6, 0x14 },
+                                                                  { 0x00b7, 0xfa },
+                                                                  { 0x00ba, 0xa7 },
+                                                                  { 0x00bb, 0xaf },
+                                                                  { 0x00bc, 0xac },
+                                                                  { 0x00bd, 0xab },
+                                                                  { 0x00bf, 0xa8 },
+                                                                  { 0x00c4, 0x8e },
+                                                                  { 0x00c5, 0x8f },
+                                                                  { 0x00c6, 0x92 },
+                                                                  { 0x00c7, 0x80 },
+                                                                  { 0x00c9, 0x90 },
+                                                                  { 0x00d1, 0xa5 },
+                                                                  { 0x00d6, 0x99 },
+                                                                  { 0x00d7, 0x78 },
+                                                                  { 0x00dc, 0x9a },
+                                                                  { 0x00df, 0xe1 },
+                                                                  { 0x00e0, 0x85 },
+                                                                  { 0x00e1, 0xa0 },
+                                                                  { 0x00e2, 0x83 },
+                                                                  { 0x00e4, 0x84 },
+                                                                  { 0x00e5, 0x86 },
+                                                                  { 0x00e6, 0x91 },
+                                                                  { 0x00e7, 0x87 },
+                                                                  { 0x00e8, 0x8a },
+                                                                  { 0x00e9, 0x82 },
+                                                                  { 0x00ea, 0x88 },
+                                                                  { 0x00eb, 0x89 },
+                                                                  { 0x00ec, 0x8d },
+                                                                  { 0x00ed, 0xa1 },
+                                                                  { 0x00ee, 0x8c },
+                                                                  { 0x00ef, 0x8b },
+                                                                  { 0x00f1, 0xa4 },
+                                                                  { 0x00f2, 0x95 },
+                                                                  { 0x00f3, 0xa2 },
+                                                                  { 0x00f4, 0x93 },
+                                                                  { 0x00f6, 0x94 },
+                                                                  { 0x00f7, 0xf6 },
+                                                                  { 0x00f9, 0x97 },
+                                                                  { 0x00fa, 0xa3 },
+                                                                  { 0x00fb, 0x96 },
+                                                                  { 0x00fc, 0x81 },
+                                                                  { 0x00ff, 0x98 },
+                                                                  { 0x0100, 0x41 },
+                                                                  { 0x0101, 0x61 },
+                                                                  { 0x0112, 0x45 },
+                                                                  { 0x0113, 0x65 },
+                                                                  { 0x012a, 0x49 },
+                                                                  { 0x012b, 0x69 },
+                                                                  { 0x014c, 0x4f },
+                                                                  { 0x014d, 0x6f },
+                                                                  { 0x016a, 0x55 },
+                                                                  { 0x016b, 0x75 },
+                                                                  { 0x0192, 0x9f },
+                                                                  { 0x0393, 0xe2 },
+                                                                  { 0x0398, 0xe9 },
+                                                                  { 0x03a3, 0xe4 },
+                                                                  { 0x03a6, 0xe8 },
+                                                                  { 0x03a9, 0xea },
+                                                                  { 0x03b1, 0xe0 },
+                                                                  { 0x03b4, 0xeb },
+                                                                  { 0x03b5, 0xee },
+                                                                  { 0x03c0, 0xe3 },
+                                                                  { 0x03c3, 0xe5 },
+                                                                  { 0x03c4, 0xe7 },
+                                                                  { 0x03c6, 0xed },
                                                                   { 0x2011, 0x2d },
                                                                   { 0x2012, 0x2d },
                                                                   { 0x2013, 0x2d },
                                                                   { 0x2014, 0x2d },
-                                                                  { 0x2019, 0x27 },
-                                                                  { 0x00ae, 0x52 },
                                                                   { 0x2018, 0x60 },
-                                                                  { 0x00a9, 0x63 },
-                                                                  { 0x00d7, 0x78 },
-                                                                  { 0x2302, 0x7f },
-                                                                  { 0x00c7, 0x80 },
-                                                                  { 0x00fc, 0x81 },
-                                                                  { 0x00e9, 0x82 },
-                                                                  { 0x00e2, 0x83 },
-                                                                  { 0x00e4, 0x84 },
-                                                                  { 0x00e0, 0x85 },
-                                                                  { 0x00e5, 0x86 },
-                                                                  { 0x00e7, 0x87 },
-                                                                  { 0x00ea, 0x88 },
-                                                                  { 0x00eb, 0x89 },
-                                                                  { 0x00e8, 0x8a },
-                                                                  { 0x00ef, 0x8b },
-                                                                  { 0x00ee, 0x8c },
-                                                                  { 0x00ec, 0x8d },
-                                                                  { 0x00c4, 0x8e },
-                                                                  { 0x00c5, 0x8f },
-                                                                  { 0x00c9, 0x90 },
-                                                                  { 0x00e6, 0x91 },
-                                                                  { 0x00c6, 0x92 },
-                                                                  { 0x00f4, 0x93 },
-                                                                  { 0x00f6, 0x94 },
-                                                                  { 0x00f2, 0x95 },
-                                                                  { 0x00fb, 0x96 },
-                                                                  { 0x00f9, 0x97 },
-                                                                  { 0x00ff, 0x98 },
-                                                                  { 0x00d6, 0x99 },
-                                                                  { 0x00dc, 0x9a },
-                                                                  { 0x00a2, 0x9b },
-                                                                  { 0x00a3, 0x9c },
-                                                                  { 0x00a5, 0x9d },
+                                                                  { 0x2019, 0x27 },
+                                                                  { 0x201c, 0x22 },
+                                                                  { 0x201d, 0x22 },
+                                                                  { 0x2022, 0x07 },
+                                                                  { 0x2026, 0x5f },
+                                                                  { 0x2032, 0x27 },
+                                                                  { 0x2033, 0x22 },
+                                                                  { 0x2039, 0x3c },
+                                                                  { 0x203a, 0x3e },
+                                                                  { 0x203c, 0x13 },
+                                                                  { 0x207f, 0xfc },
                                                                   { 0x20a7, 0x9e },
-                                                                  { 0x0192, 0x9f },
-                                                                  { 0x00e1, 0xa0 },
-                                                                  { 0x00ed, 0xa1 },
-                                                                  { 0x00f3, 0xa2 },
-                                                                  { 0x00fa, 0xa3 },
-                                                                  { 0x00f1, 0xa4 },
-                                                                  { 0x00d1, 0xa5 },
-                                                                  { 0x00aa, 0xa6 },
-                                                                  { 0x00ba, 0xa7 },
-                                                                  { 0x00bf, 0xa8 },
+                                                                  { 0x2190, 0x1b },
+                                                                  { 0x2191, 0x18 },
+                                                                  { 0x2192, 0x1a },
+                                                                  { 0x2193, 0x19 },
+                                                                  { 0x2194, 0x1d },
+                                                                  { 0x2195, 0x12 },
+                                                                  { 0x21ab, 0x17 },
+                                                                  { 0x2212, 0x2d },
+                                                                  { 0x2219, 0xf9 },
+                                                                  { 0x221a, 0xfb },
+                                                                  { 0x221e, 0xec },
+                                                                  { 0x221f, 0x1c },
+                                                                  { 0x2229, 0xef },
+                                                                  { 0x2248, 0xf7 },
+                                                                  { 0x2261, 0xf0 },
+                                                                  { 0x2264, 0xf3 },
+                                                                  { 0x2265, 0xf2 },
+                                                                  { 0x2302, 0x7f },
                                                                   { 0x2310, 0xa9 },
-                                                                  { 0x00ac, 0xaa },
-                                                                  { 0x00bd, 0xab },
-                                                                  { 0x00bc, 0xac },
-                                                                  { 0x00a1, 0xad },
-                                                                  { 0x00ab, 0xae },
-                                                                  { 0x00bb, 0xaf },
+                                                                  { 0x2320, 0xf4 },
+                                                                  { 0x2321, 0xf5 },
+                                                                  { 0x2500, 0xc4 },
+                                                                  { 0x2502, 0xb3 },
+                                                                  { 0x250c, 0xda },
+                                                                  { 0x2510, 0xbf },
+                                                                  { 0x2514, 0xc0 },
+                                                                  { 0x2518, 0xd9 },
+                                                                  { 0x251c, 0xc3 },
+                                                                  { 0x2524, 0xb4 },
+                                                                  { 0x252c, 0xc2 },
+                                                                  { 0x2534, 0xc1 },
+                                                                  { 0x253c, 0xc5 },
+                                                                  { 0x2550, 0xcd },
+                                                                  { 0x2551, 0xba },
+                                                                  { 0x2552, 0xd5 },
+                                                                  { 0x2553, 0xd6 },
+                                                                  { 0x2554, 0xc9 },
+                                                                  { 0x2555, 0xb8 },
+                                                                  { 0x2556, 0xb7 },
+                                                                  { 0x2557, 0xbb },
+                                                                  { 0x2558, 0xd4 },
+                                                                  { 0x2559, 0xd3 },
+                                                                  { 0x255a, 0xc8 },
+                                                                  { 0x255b, 0xbe },
+                                                                  { 0x255c, 0xbd },
+                                                                  { 0x255d, 0xbc },
+                                                                  { 0x255e, 0xc6 },
+                                                                  { 0x255f, 0xc7 },
+                                                                  { 0x2560, 0xcc },
+                                                                  { 0x2561, 0xb5 },
+                                                                  { 0x2562, 0xb6 },
+                                                                  { 0x2563, 0xb9 },
+                                                                  { 0x2564, 0xd1 },
+                                                                  { 0x2565, 0xd2 },
+                                                                  { 0x2566, 0xcb },
+                                                                  { 0x2567, 0xcf },
+                                                                  { 0x2568, 0xd0 },
+                                                                  { 0x2569, 0xca },
+                                                                  { 0x256a, 0xd8 },
+                                                                  { 0x256b, 0xd7 },
+                                                                  { 0x256c, 0xce },
+                                                                  { 0x2580, 0xdf },
+                                                                  { 0x2584, 0xdc },
+                                                                  { 0x2588, 0xdb },
+                                                                  { 0x258c, 0xdd },
+                                                                  { 0x2590, 0xde },
                                                                   { 0x2591, 0xb0 },
                                                                   { 0x2592, 0xb1 },
                                                                   { 0x2593, 0xb2 },
-                                                                  { 0x2502, 0xb3 },
-                                                                  { 0x2524, 0xb4 },
-                                                                  { 0x2561, 0xb5 },
-                                                                  { 0x2562, 0xb6 },
-                                                                  { 0x2556, 0xb7 },
-                                                                  { 0x2555, 0xb8 },
-                                                                  { 0x2563, 0xb9 },
-                                                                  { 0x2551, 0xba },
-                                                                  { 0x2557, 0xbb },
-                                                                  { 0x255d, 0xbc },
-                                                                  { 0x255c, 0xbd },
-                                                                  { 0x255b, 0xbe },
-                                                                  { 0x2510, 0xbf },
-                                                                  { 0x2514, 0xc0 },
-                                                                  { 0x2534, 0xc1 },
-                                                                  { 0x252c, 0xc2 },
-                                                                  { 0x251c, 0xc3 },
-                                                                  { 0x2500, 0xc4 },
-                                                                  { 0x253c, 0xc5 },
-                                                                  { 0x255e, 0xc6 },
-                                                                  { 0x255f, 0xc7 },
-                                                                  { 0x255a, 0xc8 },
-                                                                  { 0x2554, 0xc9 },
-                                                                  { 0x2569, 0xca },
-                                                                  { 0x2566, 0xcb },
-                                                                  { 0x2560, 0xcc },
-                                                                  { 0x2550, 0xcd },
-                                                                  { 0x256c, 0xce },
-                                                                  { 0x2567, 0xcf },
-                                                                  { 0x2568, 0xd0 },
-                                                                  { 0x2564, 0xd1 },
-                                                                  { 0x2565, 0xd2 },
-                                                                  { 0x2559, 0xd3 },
-                                                                  { 0x2558, 0xd4 },
-                                                                  { 0x2552, 0xd5 },
-                                                                  { 0x2553, 0xd6 },
-                                                                  { 0x256b, 0xd7 },
-                                                                  { 0x256a, 0xd8 },
-                                                                  { 0x2518, 0xd9 },
-                                                                  { 0x250c, 0xda },
-                                                                  { 0x2588, 0xdb },
-                                                                  { 0x2584, 0xdc },
-                                                                  { 0x258c, 0xdd },
-                                                                  { 0x2590, 0xde },
-                                                                  { 0x2580, 0xdf },
-                                                                  { 0x03b1, 0xe0 },
-                                                                  { 0x00df, 0xe1 },
-                                                                  { 0x0393, 0xe2 },
-                                                                  { 0x03c0, 0xe3 },
-                                                                  { 0x03a3, 0xe4 },
-                                                                  { 0x03c3, 0xe5 },
-                                                                  { 0x00b5, 0xe6 },
-                                                                  { 0x03c4, 0xe7 },
-                                                                  { 0x03a6, 0xe8 },
-                                                                  { 0x0398, 0xe9 },
-                                                                  { 0x03a9, 0xea },
-                                                                  { 0x03b4, 0xeb },
-                                                                  { 0x221e, 0xec },
-                                                                  { 0x03c6, 0xed },
-                                                                  { 0x03b5, 0xee },
-                                                                  { 0x2229, 0xef },
-                                                                  { 0x2261, 0xf0 },
-                                                                  { 0x00b1, 0xf1 },
-                                                                  { 0x2265, 0xf2 },
-                                                                  { 0x2264, 0xf3 },
-                                                                  { 0x2320, 0xf4 },
-                                                                  { 0x2321, 0xf5 },
-                                                                  { 0x00f7, 0xf6 },
-                                                                  { 0x2248, 0xf7 },
-                                                                  { 0x00b0, 0xf8 },
-                                                                  { 0x2219, 0xf9 },
-                                                                  { 0x00b7, 0xfa },
-                                                                  { 0x221a, 0xfb },
-                                                                  { 0x207f, 0xfc },
-                                                                  { 0x00b2, 0xfd },
                                                                   { 0x25a0, 0xfe },
-                                                                  { 0x00a0, 0xff },
-                                                                  { 0x0100, 0x41 },
-                                                                  { 0x0112, 0x45 },
-                                                                  { 0x012a, 0x49 },
-                                                                  { 0x014c, 0x4f },
-                                                                  { 0x016a, 0x55 },
-                                                                  { 0x0101, 0x61 },
-                                                                  { 0x0113, 0x65 },
-                                                                  { 0x012b, 0x69 },
-                                                                  { 0x014d, 0x6f },
-                                                                  { 0x016b, 0x75 },
-                                                                  { 0x2026, 0x5f },
+                                                                  { 0x25ac, 0x16 },
+                                                                  { 0x25b2, 0x1e },
+                                                                  { 0x25ba, 0x10 },
+                                                                  { 0x25bc, 0x1f },
+                                                                  { 0x25c4, 0x11 },
+                                                                  { 0x25cb, 0x09 },
+                                                                  { 0x25cf, 0x07 },
+                                                                  { 0x25d8, 0x08 },
+                                                                  { 0x25d9, 0x0a },
                                                                   { 0x2630, 0xf0 },
-                                                                  { 0x2033, 0x22 },
-                                                                  { 0x2032, 0x27 },
-                                                                  { 0x2212, 0x2d }
+                                                                  { 0x263a, 0x01 },
+                                                                  { 0x263b, 0x02 },
+                                                                  { 0x263c, 0x0f },
+                                                                  { 0x2640, 0x0c },
+                                                                  { 0x2642, 0x0b },
+                                                                  { 0x2660, 0x06 },
+                                                                  { 0x2663, 0x05 },
+                                                                  { 0x2665, 0x03 },
+                                                                  { 0x2666, 0x04 },
+                                                                  { 0x266a, 0x0d },
+                                                                  { 0x266b, 0x0e },
+                                                                  { 0x1d11e, 0x26 }
 };
 
 char TermType[TERMTYPE_MAXLEN] = "ANSI";
@@ -344,7 +345,7 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len );
 
 static uint16_t processCSISeq( uint8_t *buffer, uint16_t len );
 static uint16_t processOSCSeq( uint8_t *buffer, uint16_t len );
-static uint16_t processUTF3Seq( uint8_t *buffer, uint16_t len );
+static uint16_t processUTFSeq( uint8_t *buffer, uint16_t len, uint16_t size );
 inline void     processAnsiCommand( uint8_t commandLetter );
 static void     processDecPrivateControl( uint8_t commandLetter );
 static void     processNonCSIEscSeq( uint8_t ch );
@@ -366,8 +367,8 @@ static void     doHelp( void );
 
 static void     send( uint8_t *userBuf, uint16_t userBufLen );
 
-char utf_chars[3];
-uint8_t utf_chars_seen;
+char utf_chars[4];
+uint16_t utf_chars_seen;
 
 // char base64_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -492,7 +493,7 @@ TelnetOpts MyTelnetOpts;
 Screen s;
 Graphics g;
 
-enum StreamStates { Normal = 0, ESC_SEEN, CSI_SEEN, OSC_SEEN, DCS_SEEN, IAC_SEEN, UTF2_SEEN, UTF3_SEEN };
+enum StreamStates { Normal = 0, ESC_SEEN, CSI_SEEN, OSC_SEEN, DCS_SEEN, IAC_SEEN, UTF2_SEEN, UTF3_SEEN, UTF4_SEEN };
 StreamStates StreamState;
 
 
@@ -710,7 +711,7 @@ void send_move() {
   }
   prevRow = mouse.row;
   prevCol = mouse.column;
-  if ( !mouse.xterm_motion ) {
+  if ( !mouse.xterm_any ) {
     if ( mouse.buttons & 3 ) {
       mouse_hide();
       s.extendSelectionRelative(mouse.row - 1, mouse.column - 1, downRow - 1, downCol - 1);
@@ -723,6 +724,7 @@ void send_move() {
     if ( mySocket->outgoingQueueIsFull( ) ) return;
     uint8_t buttonVal = 32;
     DataBuf *buf = (DataBuf *)TcpBuffer::getXmitBuf( );
+    if ( buf == NULL ) return;
     uint8_t i = 0;
     buf->data[i++] = 0x1b;
     buf->data[i++] = '[';
@@ -763,6 +765,7 @@ void send_move() {
   else if ( mouse.xterm_normal ) {
     if ( mySocket->outgoingQueueIsFull( ) ) return;
     DataBuf *buf = (DataBuf *)TcpBuffer::getXmitBuf( );
+    if ( buf == NULL ) return;
     uint8_t i = 0;
     uint8_t Cb;
     if ( mouse.buttons & 4 ) {
@@ -790,6 +793,7 @@ void send_move() {
 void send_selection() {
   if ( s.usingGraphics ) return;
   DataBuf *buf = (DataBuf *)TcpBuffer::getXmitBuf( );
+  if ( buf == NULL ) return;
   int selection_length = strlen(s.selection.buf);
   int i = 0;
   if (mouse.bracketed_paste) {
@@ -829,6 +833,7 @@ void send_click( uint8_t direction, uint8_t buttonVal ) {
     prevRow = mouse.row;
     prevCol = mouse.column;
     DataBuf *buf = (DataBuf *)TcpBuffer::getXmitBuf( );
+    if ( buf == NULL ) return;
     uint8_t i = 0;
     buf->data[i++] = 0x1b;
     buf->data[i++] = '[';
@@ -871,6 +876,7 @@ void send_click( uint8_t direction, uint8_t buttonVal ) {
     // }
     // else {
     DataBuf *buf = (DataBuf *)TcpBuffer::getXmitBuf( );
+    if ( buf == NULL ) return;
     uint8_t i = 0;
     uint8_t Cb;
     if ( direction == MOUSE_DOWN ) {
@@ -994,7 +1000,7 @@ int main( int argc, char *argv[] ) {
   if ( getenv("TELNET_STRICT_DOS") ) {
     Strict_DOS_Mode = 1;
   }
-  
+
 
 
 
@@ -1172,8 +1178,7 @@ int main( int argc, char *argv[] ) {
     }
     #endif
     #endif
-
-    if (s.printerReadIndex != s.printerWriteIndex){
+    if ( s.PrintingAllowed && s.printerReadIndex != s.printerWriteIndex){
       s.writeCount = PRINT_COUNT;
       while (s.printerReadIndex != s.printerWriteIndex && s.writeCount-- > 0){
         if (++s.printerReadIndex >= PRINT_BUFFER_SIZE){
@@ -1238,7 +1243,7 @@ int main( int argc, char *argv[] ) {
           ibm_mouse_get_time(&lastMouseTime);
         }
         send_move();
-        if ( buffer_start == buffer_end ) {
+        if ( buffer_start == buffer_end || ( mouse.xterm_any && mySocket->outgoingQueueIsFull( ) ) ) {
         }
         else {
           while (1) {
@@ -1390,7 +1395,7 @@ int main( int argc, char *argv[] ) {
             }
 
             buffer_start = (buffer_start + 1) & 0x0f;
-            if (buffer_start == buffer_end) {
+            if (buffer_start == buffer_end || mouse.xterm_any) {
               break;
             }
           }
@@ -3040,6 +3045,7 @@ void getCfgOpts( void ) {
 
   if ( Utils::getAppValue( "TELNET_CODEPAGE", tmp, 10 ) == 0 ) {
     s.transTableCount = Utils::getUtfValues(tmp, s.transTable, 0);
+    s.transTableMidPoint = s.transTableCount >> 1;
   }
   else {
     s.transTableCount = 0;
@@ -3048,10 +3054,12 @@ void getCfgOpts( void ) {
   if ( s.transTableCount == 0 ) {
     s.transTable = defaultTransTable;
     s.transTableCount = NUMBER_OF_DEFAULT_UTF_TRANSLATIONS;
+    s.transTableMidPoint = NUMBER_OF_DEFAULT_UTF_TRANSLATIONS >> 1;
   }
   else {
     s.transTable = (utfTrans *)malloc( s.transTableCount * sizeof(utfTrans) );
     Utils::getUtfValues(tmp, s.transTable, 1);
+    Utils::sortUtfValues(s.transTable, &s.transTableCount);
   }
 
   if ( Utils::getAppValue( "TELNET_SEND_NEWLINE", tmp, 10 ) == 0 ) {
@@ -3221,7 +3229,14 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
     }
     else if ( StreamState == UTF3_SEEN ) {
 
-      uint16_t rc = processUTF3Seq( recvBuffer+i, (len-i) );
+      uint16_t rc = processUTFSeq( recvBuffer+i, (len-i), 3 );
+
+      i = i + rc - 1;
+
+    }
+    else if ( StreamState == UTF4_SEEN ) {
+
+      uint16_t rc = processUTFSeq( recvBuffer+i, (len-i), 4 );
 
       i = i + rc - 1;
 
@@ -3282,13 +3297,19 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
         StreamState = ESC_SEEN;
       }
 
+      else if ( recvBuffer[i] >= 0xf0 ) {
+        StreamState = UTF4_SEEN;
+        utf_chars[0] = recvBuffer[i];
+        utf_chars_seen = 1;
+      }
+
       else if ( recvBuffer[i] >= 0xe0 ) {
         StreamState = UTF3_SEEN;
         utf_chars[0] = recvBuffer[i];
         utf_chars_seen = 1;
       }
 
-      else if ( recvBuffer[i] >= 0x7f ) {
+      else if ( recvBuffer[i] >= 0x80 ) {
         StreamState = UTF2_SEEN;
         utf_chars[0] = recvBuffer[i];
       }
@@ -3759,15 +3780,15 @@ static int16_t processSingleTelnetCmd( uint8_t *cmdStr, uint8_t inputBytes, uint
 
 }
 
-static uint16_t processUTF3Seq( uint8_t *buffer, uint16_t len ) {
+static uint16_t processUTFSeq( uint8_t *buffer, uint16_t len, uint16_t size ) {
   uint16_t bytesProcessed = 0;
-  while ( bytesProcessed < len && utf_chars_seen < 3 ) {
+  while ( bytesProcessed < len && utf_chars_seen < size ) {
     utf_chars[utf_chars_seen] = buffer[bytesProcessed];
     utf_chars_seen++;
     bytesProcessed++;
   }
-  if ( utf_chars_seen == 3 ) {
-    s.add( utf_chars, 3 );
+  if ( utf_chars_seen == size ) {
+    s.add( utf_chars, size );
     StreamState = Normal;
   }
   return bytesProcessed;
@@ -4508,6 +4529,8 @@ void processDecPrivateControl( uint8_t commandLetter ) {
         }
         else {
           mouse.xterm_any = false;
+          mouse.should_show = false;
+          mouse_hide();
         }
 
       }
