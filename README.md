@@ -88,11 +88,6 @@ no translation is available, a default character, `¿`, is printed.
 Unicode translation does not take place when sending outbound
 characters.
 
-It would be impossible to set up a translation for every possible
-Unicode character because that would require more than 640k just for
-the translation table. However, if there is a Unicode character that
-you would like to be supported, feel free to create a GitHub issue.
-
 If you are connected to server that sends "extended ASCII" characters
 (codes greater than 127) with the expectation that your Telnet client
 will display them directly to video memory (e.g., as [Code Page 437]
@@ -252,6 +247,10 @@ To see the usage instructions, call `show` with the `--help` switch.
 
 For instructions on installing the [show] utility and integrating it
 with applications, see the Setup section below.
+
+The [show] utility is a [bash] script, so you can edit it. You can
+change the script so that you do not have to provide any flags to get
+the image format you want.
 
 ### Printing
 

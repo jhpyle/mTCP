@@ -753,7 +753,7 @@ void Screen::add( char *buf, uint16_t len ) {
     }
     else{
       isASCII = false;
-      uint32_t utfcode = 0;
+      uint32_t utfcode;
       if ( buf[i] < 0xe0 ) {
         utfcode = (( (uint32_t)buf[i] & 0x1f ) << 6 ) | ( (uint32_t)buf[i + 1] & 0x3f );
         i += 1;
