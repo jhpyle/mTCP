@@ -718,7 +718,7 @@ void Utils::sortUtfValues( utfTrans *transTable, int *tableLength ){
   while (somethingChanged){
     somethingChanged = false;
     for (i = 0; i < n; ++i){
-      if (transTable[i].utfChar > transTable[i + 1].utfChar){
+      if ((transTable[i].utfChar & 0xff) > (transTable[i + 1].utfChar & 0xff)){
         utfChar = transTable[i].utfChar;
         screenChar = transTable[i].screenChar;
         transTable[i].utfChar = transTable[i + 1].utfChar;

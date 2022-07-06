@@ -767,26 +767,18 @@ void Screen::add( char *buf, uint16_t len ) {
         i += 3;
       }
       c = nonPrintable;
-      int j;
-      if (utfcode < transTable[transTableMidPoint].utfChar){
-        j = transTableMidPoint - 1;
-        while (j > 0){
-          if ( transTable[j].utfChar == utfcode ){
-            c = transTable[j].screenChar;
-            break;
-          }
-          j--;
+      int j = (int)(utfcode & 0xff);
+      uint32_t msb = (uint32_t)(utfcode & 0xffffff00);
+      uint32_t *lookupPtr;
+      lookupPtr = transIndex[j];
+      uint32_t *endPtr;
+      endPtr = transIndex[j + 1];
+      while (lookupPtr < endPtr){
+        if ((uint32_t)((*lookupPtr) & 0xffffff00) == msb){
+          c = (uint8_t)((*lookupPtr) & 0xff);
+          break;
         }
-      }
-      else{
-        j = transTableMidPoint;
-        while (j < transTableCount){
-          if ( transTable[j].utfChar == utfcode ){
-            c = transTable[j].screenChar;
-            break;
-          }
-          j++;
-        }
+        lookupPtr++;
       }
     }
     if ( c == 0 ) {         // Null char

@@ -234,8 +234,9 @@ class Screen {
     } selection;
 
     utfTrans far *transTable;
+    uint32_t** transIndex;
+    uint32_t* transLookup;
     int      transTableCount;
-    int      transTableMidPoint;
     uint8_t  nonPrintable;
 
     uint8_t PrintingAllowed;
