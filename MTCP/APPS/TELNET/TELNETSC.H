@@ -233,11 +233,15 @@ class Screen {
       bool      pad7;
     } selection;
 
+#ifdef USE_UTF
     utfTrans far *transTable;
-    uint32_t** transIndex;
+    uint16_t* transIndex;
     uint32_t* transLookup;
     int      transTableCount;
     uint8_t  nonPrintable;
+#else
+    uint8_t  pad8;
+#endif
 
     uint8_t PrintingAllowed;
     uint8_t AutoPrint;

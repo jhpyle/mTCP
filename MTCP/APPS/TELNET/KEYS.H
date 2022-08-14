@@ -148,6 +148,10 @@ typedef struct {
 
 Key_t getKey( void );
 
+extern uint8_t kKeyGet;
+extern uint8_t kKeyCheck;
+extern uint8_t kKeyFlags;
 
+extern "C" uint8_t cdecl get_extended_keyboard_cap( void );
 
 #endif

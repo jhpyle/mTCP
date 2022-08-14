@@ -99,8 +99,7 @@
 // Local features
 
 #define FILEXFER
+#define USE_UTF
 
 #endif
-#define K_KEY_GET           0x10
-#define K_KEY_CHECK         0x11
-#define K_KEY_FLAGS         0x12
+

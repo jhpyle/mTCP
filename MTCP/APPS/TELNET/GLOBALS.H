@@ -104,5 +104,4 @@ extern void setTelnetBinaryMode( bool binaryMode );
 
 extern bool RawOrTelnet;
 
-
 #endif

@@ -1,21 +1,7 @@
-del telnet.exe
-del telnet.obj
-del telnetsc.obj
-del telnetsx.obj
-del telnet.map
-del misc.obj
-del utils.obj
-del keys.obj
-wmake config=O.CFG
+wmake config=utf.h
 wmake patch
-copy telnet.exe telnet88.exe
-del telnet.exe
-del telnet.obj
-del telnetsc.obj
-del telnetsx.obj
-del telnet.map
-del misc.obj
-del utils.obj
-del keys.obj
-wmake config=T.CFG
+ren telnet.exe telnet.tmp
+wmake config=noutf.h
 wmake patch
+ren telnet.exe telnetnu.exe
+ren telnet.tmp telnet.exe

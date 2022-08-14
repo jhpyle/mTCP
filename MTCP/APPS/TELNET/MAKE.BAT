@@ -6,5 +6,5 @@ del telnet.map
 del misc.obj
 del utils.obj
 del keys.obj
-wmake config=T.CFG
-wmake patch
+wmake config=UTF.H
+rem wmake patch

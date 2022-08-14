@@ -145,6 +145,7 @@ uint8_t PrinterInitialized = 0;
 
 uint32_t ConnectTimeout = TELNET_CONNECT_TIMEOUT; // How many ms to wait for a connection
 
+#ifdef USE_UTF
 utfTrans defaultTransTable[NUMBER_OF_DEFAULT_UTF_TRANSLATIONS] = {
                                                                   { 0x0100, 0x41 },
                                                                   { 0x2500, 0xc4 },
@@ -337,7 +338,7 @@ utfTrans defaultTransTable[NUMBER_OF_DEFAULT_UTF_TRANSLATIONS] = {
                                                                   { 0x00fc, 0x81 },
                                                                   { 0x00ff, 0x98 }
 };
-
+#endif
 char TermType[TERMTYPE_MAXLEN] = "ANSI";
 //char *incomingClipboard = (char *)malloc(BASE64_BUFFER_SIZE);
 
@@ -345,7 +346,9 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len );
 
 static uint16_t processCSISeq( uint8_t *buffer, uint16_t len );
 static uint16_t processOSCSeq( uint8_t *buffer, uint16_t len );
+#ifdef USE_UTF
 static uint16_t processUTFSeq( uint8_t *buffer, uint16_t len, uint16_t size );
+#endif
 inline void     processAnsiCommand( uint8_t commandLetter );
 static void     processDecPrivateControl( uint8_t commandLetter );
 static void     processNonCSIEscSeq( uint8_t ch );
@@ -367,9 +370,10 @@ static void     doHelp( void );
 
 static void     send( uint8_t *userBuf, uint16_t userBufLen );
 
+#ifdef USE_UTF
 char utf_chars[4];
 uint16_t utf_chars_seen;
-
+#endif
 // char base64_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 // static inline bool is_base64(char c) {
@@ -493,7 +497,11 @@ TelnetOpts MyTelnetOpts;
 Screen s;
 Graphics g;
 
+#ifdef USE_UTF
 enum StreamStates { Normal = 0, ESC_SEEN, CSI_SEEN, OSC_SEEN, DCS_SEEN, IAC_SEEN, UTF2_SEEN, UTF3_SEEN, UTF4_SEEN };
+#else
+enum StreamStates { Normal = 0, ESC_SEEN, CSI_SEEN, OSC_SEEN, DCS_SEEN, IAC_SEEN };
+#endif
 StreamStates StreamState;
 
 
@@ -975,6 +983,16 @@ int main( int argc, char *argv[] ) {
   mouse_install();
   s.initializeSelection();
   g.initializeGraphics();
+  if (get_extended_keyboard_cap() == 1){
+    kKeyGet = 0x00;
+    kKeyCheck = 0x01;
+    kKeyFlags = 0x02;
+  }
+  else {
+    kKeyGet = 0x10;
+    kKeyCheck = 0x11;
+    kKeyFlags = 0x12;
+  }
 
   // Allocate memory for a receive buffer.  This is in addition to the normal
   // socket receive buffer.  Do this early so that we don't get too far into
@@ -1414,7 +1432,7 @@ int main( int argc, char *argv[] ) {
 
     // If a keystroke is waiting process it
 
-    if ( bioskey(K_KEY_CHECK) ) {
+    if ( bioskey(kKeyCheck) ) {
       Key_t key = getKey( );
 
       if ( s.usingGraphics ){
@@ -1686,7 +1704,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
         }
       }
       if ( key.normalKey == 0x20 ) {
-        uint16_t flags = bioskey(K_KEY_FLAGS);
+        uint16_t flags = bioskey(kKeyFlags);
         if ( flags & 0x04 ) {
           buf->b.dataLen = 1;
           buf->data[0] = 0x00;
@@ -1761,7 +1779,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Insert: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
@@ -1773,7 +1791,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Home: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'H';
@@ -1785,7 +1803,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_End: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'F';
@@ -1797,7 +1815,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_CursorUp: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'A';
@@ -1809,7 +1827,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_CursorDown: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'B';
@@ -1821,7 +1839,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_CursorLeft: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'D';
@@ -1833,7 +1851,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_CursorRight: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = 'C';
@@ -1845,7 +1863,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_PageDown: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '6'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
@@ -1857,7 +1875,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_PageUp: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '5'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
@@ -1875,7 +1893,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
       // comment) but this doesn't work universally.  So just send a del
       // character now, which is the correct safe choice.  (Previously
       // it was a dead key, so this is a slight improvement.
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = ';'; buf->data[4] = '2'; buf->data[5] = '~';
@@ -1891,7 +1909,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_Insert: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
@@ -1904,7 +1922,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_Home: {
       s.add( "" );
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'H';
@@ -1917,7 +1935,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Ctrl_End: {
       s.add( "" );
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'F';
@@ -1929,7 +1947,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_CursorUp: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'A';
@@ -1941,7 +1959,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_CursorDown: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'B';
@@ -1953,7 +1971,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_CursorLeft: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'D';
@@ -1965,7 +1983,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_CursorRight: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = 'C';
@@ -1977,7 +1995,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_PageDown: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '6'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
@@ -1989,7 +2007,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_PageUp: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '5'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
@@ -2007,7 +2025,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Alt_Insert: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = '~';
@@ -2020,7 +2038,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_Home: {
       s.add( "" );
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'H';
@@ -2033,7 +2051,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
 
     case K_Alt_End: {
       s.add( "" );
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'F';
@@ -2045,7 +2063,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Alt_CursorUp: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'A';
@@ -2057,7 +2075,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Alt_CursorDown: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'B';
@@ -2069,7 +2087,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Alt_CursorLeft: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'D';
@@ -2081,7 +2099,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Alt_CursorRight: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = 'C';
@@ -2246,7 +2264,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Alt_F1: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 4;
         buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'P';
@@ -2258,7 +2276,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Alt_F2: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 4;
         buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'Q';
@@ -2270,7 +2288,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Alt_F3: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 4;
         buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'R';
@@ -2282,7 +2300,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Alt_F4: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 4;
         buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '4'; buf->data[3] = 'S';
@@ -2294,7 +2312,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Alt_F5: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
@@ -2306,7 +2324,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Alt_F6: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '7'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
@@ -2318,7 +2336,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Alt_F7: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '8'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
@@ -2330,7 +2348,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Alt_F8: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '9'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
@@ -2342,7 +2360,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Alt_F9: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '0'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
@@ -2354,7 +2372,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Alt_F10: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '1'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
@@ -2366,7 +2384,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Alt_F11: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '3'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
@@ -2378,7 +2396,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Alt_F12: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '4'; buf->data[4] = ';'; buf->data[5] = '4'; buf->data[6] = '~';
@@ -2390,7 +2408,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_F1: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 4;
         buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'P';
@@ -2402,7 +2420,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_F2: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 4;
         buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'Q';
@@ -2414,7 +2432,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_F3: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 4;
         buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'R';
@@ -2426,7 +2444,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_F4: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 4;
         buf->data[0] = 0x1b; buf->data[1] = 'O'; buf->data[2] = '6'; buf->data[3] = 'S';
@@ -2438,7 +2456,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_F5: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
@@ -2450,7 +2468,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_F6: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '5'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
@@ -2462,7 +2480,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_F7: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '8'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
@@ -2474,7 +2492,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_F8: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '1'; buf->data[3] = '9'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
@@ -2486,7 +2504,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_F9: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '0'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
@@ -2498,7 +2516,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_F10: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '1'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
@@ -2510,7 +2528,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_F11: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '3'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[6] = '~';
@@ -2522,7 +2540,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_F12: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 7;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '2'; buf->data[3] = '4'; buf->data[4] = ';'; buf->data[5] = '6'; buf->data[7] = '~';
@@ -2540,7 +2558,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Ctrl_Delete: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = ';'; buf->data[4] = '6'; buf->data[5] = '~';
@@ -2552,7 +2570,7 @@ void processUserInput_TelnetNonLocal( Key_t key ) {
     }
 
     case K_Alt_Delete: {
-      uint16_t flags = bioskey(K_KEY_FLAGS);
+      uint16_t flags = bioskey(kKeyFlags);
       if ( flags & 0x03 ) {
         buf->b.dataLen = 6;
         buf->data[0] = 0x1b; buf->data[1] = '['; buf->data[2] = '3'; buf->data[3] = ';'; buf->data[4] = '4'; buf->data[5] = '~';
@@ -2610,7 +2628,7 @@ void errorResolvingServer( void ) {
 
 void checkForUserExit( void ) {
 
-  if ( bioskey(K_KEY_CHECK) ) {
+  if ( bioskey(kKeyCheck) ) {
     char c = getch( );
     if ( c == 3 || c == 27 ) {
       s.add( "[Ctrl-C] or [Esc] pressed - quitting.\r\n" );
@@ -3038,6 +3056,7 @@ void getCfgOpts( void ) {
     }
   }
 
+#ifdef USE_UTF
   s.nonPrintable = 0xa8;
   if ( Utils::getAppValue( "TELNET_UTF_DEFAULT", tmp, 10 ) == 0 ) {
     sscanf( tmp, "%x", &(s.nonPrintable) );
@@ -3061,19 +3080,18 @@ void getCfgOpts( void ) {
     Utils::getUtfValues(tmp, s.transTable, 1);
     shouldFree = true;
   }
-
   Utils::sortUtfValues(s.transTable, &s.transTableCount);
 
-  s.transIndex = (uint32_t**)malloc( 257 * sizeof(uint32_t*) );
-  s.transLookup = (uint32_t*)malloc( s.transTableCount * sizeof(uint32_t) );
+  s.transIndex = (uint16_t*)malloc( 257 * sizeof(uint16_t) );
+  //s.transLookup = (uint32_t*)malloc( s.transTableCount * sizeof(uint32_t) );
   int prevLSB;
   int currentLSB;
   bool firstTime = true;
-  int i;
+  uint16_t i;
   int j;
   for (i = 0; i < s.transTableCount; ++i){
     currentLSB = (int)(s.transTable[i].utfChar & 0xff);
-    s.transLookup[i] = (uint32_t)((s.transTable[i].utfChar & 0xffffff00) | s.transTable[i].screenChar);
+    //s.transLookup[i] = (uint32_t)((s.transTable[i].utfChar & 0xffffff00) | s.transTable[i].screenChar);
     if (firstTime || currentLSB != prevLSB){
       if (firstTime){
         firstTime = false;
@@ -3083,18 +3101,19 @@ void getCfgOpts( void ) {
         j = prevLSB + 1;
       }
       while (j <= currentLSB){
-        s.transIndex[j++] = &(s.transLookup[i]);
+        s.transIndex[j++] = i;
       }
     }
     prevLSB = currentLSB;
   }
   j = prevLSB + 1;
   while (j <= 0x100){
-    s.transIndex[j++] = &(s.transLookup[i]);
+    s.transIndex[j++] = i;
   }
-  if (shouldFree){
-    free(s.transTable);
-  }
+  //if (shouldFree){
+  //  free(s.transTable);
+  //}
+#endif
 
   if ( Utils::getAppValue( "TELNET_SEND_NEWLINE", tmp, 10 ) == 0 ) {
     if ( stricmp( tmp, "CR/LF" ) == 0 ) {
@@ -3254,6 +3273,7 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
       }
       //s.updateVidBufPtr( );
     }
+#ifdef USE_UTF
     else if ( StreamState == UTF2_SEEN ) {
 
       utf_chars[1] = recvBuffer[i];
@@ -3275,7 +3295,7 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
       i = i + rc - 1;
 
     }
-
+#endif
     else if ( StreamState == IAC_SEEN ) {
 
       if ( MyTelnetOpts.isRmtOn( TELOPT_BIN ) && recvBuffer[i] == TEL_IAC ) {
@@ -3331,6 +3351,7 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
         StreamState = ESC_SEEN;
       }
 
+#ifdef USE_UTF
       else if ( recvBuffer[i] >= 0xf0 ) {
         StreamState = UTF4_SEEN;
         utf_chars[0] = recvBuffer[i];
@@ -3347,7 +3368,7 @@ static uint16_t processSocket( uint8_t *recvBuffer, uint16_t len ) {
         StreamState = UTF2_SEEN;
         utf_chars[0] = recvBuffer[i];
       }
-
+#endif
       else {
 
         // Not a telnet or an ESC code.  Do screen handling here.
@@ -3814,6 +3835,7 @@ static int16_t processSingleTelnetCmd( uint8_t *cmdStr, uint8_t inputBytes, uint
 
 }
 
+#ifdef USE_UTF
 static uint16_t processUTFSeq( uint8_t *buffer, uint16_t len, uint16_t size ) {
   uint16_t bytesProcessed = 0;
   while ( bytesProcessed < len && utf_chars_seen < size ) {
@@ -3827,7 +3849,7 @@ static uint16_t processUTFSeq( uint8_t *buffer, uint16_t len, uint16_t size ) {
   }
   return bytesProcessed;
 }
-
+#endif
 // CSI [p] c             0 or 1 parms
 // CSI [p] ; [p] c       2 parms
 

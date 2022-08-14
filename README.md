@@ -10,9 +10,9 @@ B. Brutman's [mTCP].  It adds:
 * Printer support
 
 The binary is available as the [TELNET.EXE] file and the
-[TELNET88.EXE] file, which are in the [bin] directory.  The
-[TELNET88.EXE] file is for machines without [Enhanced Keyboard]
-support.
+[TELNETNU.EXE] file, which are in the [bin] directory.  The
+[TELNETNU.EXE] file is the same as [TELNET.EXE] except that it
+disables Unicode translation.
 
 The fork is based on the [mTCP-src_2022-07-01.zip] version of [mTCP].
 
@@ -39,8 +39,9 @@ The following keys are transmitted:
 In the official [mTCP], Page Up and Page Down scroll are not passed
 through but are used for scrolling through the output history.  In
 this version, that function is moved to the Alt-Page Up and Alt-Page
-Down keys (or Ctrl-Page Up and Ctrl-Page Dn with [TELNET88.EXE]), and
-Page Up and Page Down are passed through to the server.
+Down keys (or Ctrl-Page Up and Ctrl-Page Dn if the [Enhanced Keyboard]
+is not available), and Page Up and Page Down are passed through to the
+server.
 
 For compatibility with [Emacs], all Alt-(key) combinations that are
 not used by the Telnet application are passed through as ESC-(key).
@@ -76,7 +77,7 @@ Clicking the left and right mouse buttons at the same time emulates
 the middle mouse button.
 
 For mouse support to work, you may need to install a mouse driver
-(typically [MOUSE.COM]) before running [TELNET.EXE] or [TELNET88.EXE].
+(typically [MOUSE.COM]) before running [TELNET.EXE] or [TELNETNU.EXE].
 
 ### Unicode
 
@@ -304,14 +305,6 @@ on and off.  As explained in "Configuring your applications," below,
 you can also bind keys in [bash] for turning printing on and off.
 
 ## Compatibility
-
-There are two versions of the executable:
-
-* TELNET.EXE - for machines with [Enhanced Keyboard] support ([IBM
-  PC/AT] dated 11/15/1985 and after, [IBM PC/XT] dated 1/10/1986 and
-  after, [IBM XT 286], and [PS/2] models.
-* TELNET88.EXE - for earlier machines without [Enhanced Keyboard]
-  support (e.g., [IBM PC 5150]).
 
 This package has been tested on:
 
@@ -574,7 +567,7 @@ If you use [R], you might want to use this shorthand for showing a
 
 ## Compiling
 
-I compiled [TELNET.EXE] and [TELNET88.EXE] using [Open Watcom 1.9]
+I compiled [TELNET.EXE] and [TELNETNU.EXE] using [Open Watcom 1.9]
 inside [DosBox] on a Linux machine.
 
 I created a folder `~/dos` and installed Watcom under `~/dos/WATCOM`
@@ -599,8 +592,7 @@ the [MAKEFILE] by commenting out this line:
     compile_options += -i=$(tcp_h_dir) -i=$(common_h_dir)
 
 In its place, I used the `INCLUDE` environment variable to let the
-compiler know where the `.h` files are.  I also had to abbreviate
-`TELNET.CFG` to `T.CFG` to squeeze some additional characters in.
+compiler know where the `.h` files are.
 
 Then I was able to compile Telnet by running `wmake` from the
 `~/dos/MTCP/APPS/TELNET` directory.
@@ -613,20 +605,20 @@ I created a batch file called `MAKE.BAT` to recompile only the parts I was editi
     del telnetsx.obj
     del telnet.map
     del misc.obj
-    wmake telnet.exe config=T.CFG
+    wmake telnet.exe config=UTF.H
 
 This is much faster than waiting for a full `wmake` to complete.
 
-To build a version of `telnet.exe` without [Enhanced Keyboard]
-support, use the `O.CFG` file instead of `T.CFG`.
+To build a version of `telnet.exe` without the Unicode translation feature
+support, use the `NOUTF.H` file instead of `UTF.H`.
 
 For a final build, run `wmake` and then `wmake patch`, and generate
-both `TELNET88.EXE` and `TELNET.EXE`.  (See the file `MAKEALL.BAT`)
+both `TELNETNU.EXE` and `TELNET.EXE`.  (See the file `MAKEALL.BAT`.)
 
 [ansi.src]: https://github.com/jhpyle/mTCP/blob/master/ansi.src
 [MAKEFILE]: https://github.com/jhpyle/mTCP/blob/master/MTCP/APPS/TELNET/MAKEFILE
 [TELNET.EXE]: https://github.com/jhpyle/mTCP/blob/master/bin/telnet.exe
-[TELNET88.EXE]: https://github.com/jhpyle/mTCP/blob/master/bin/telnet88.exe
+[TELNETNU.EXE]: https://github.com/jhpyle/mTCP/blob/master/bin/telnetnu.exe
 [bin]: https://github.com/jhpyle/mTCP/blob/master/bin
 [mTCP]: https://www.brutman.com/
 [ansi.el]: https://github.com/jhpyle/mTCP/blob/master/ansi.el

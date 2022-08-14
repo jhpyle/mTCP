@@ -95,11 +95,10 @@
 #define TCP_CLOSE_TIMEOUT    (10000ul)   // MS before forcing a socket closed
 
 
+
 // Local features
 
 #define FILEXFER
 
 #endif
-#define K_KEY_GET           0x00
-#define K_KEY_CHECK         0x01
-#define K_KEY_FLAGS         0x02
+

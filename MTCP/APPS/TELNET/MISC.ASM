@@ -746,6 +746,51 @@ _send_char_to_printer proc far
 
 _send_char_to_printer endp
 
+public _get_extended_keyboard_cap
+
+_get_extended_keyboard_cap proc far
+
+	push	cx
+
+key_loop1:
+	mov	ah, 1
+	int	16h
+	jz	key_try5
+	mov	ah, 0
+	int	16h
+	jmp	key_loop1
+
+key_try5:
+	mov	ah, 5
+	mov	cx, 0FFFFh
+	int	16h
+	cmp	al, 0
+	ja	key_no_ext
+	mov	cx, 16
+
+key_loop2:
+	mov	ah, 11h
+	int	16h
+	jz	key_no_ext
+	mov	ah, 10h
+	int	16h
+	cmp	ax, 0FFFFh
+	je	key_ok
+	loop	key_loop2
+
+key_no_ext:
+	mov	al, 1
+	jmp	key_ret
+
+key_ok:
+	xor	al, al
+
+key_ret:
+	pop	cx
+	ret
+
+_get_extended_keyboard_cap endp
+
 _TEXT ends
 
 end

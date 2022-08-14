@@ -744,9 +744,10 @@ void Screen::add( char *buf, uint16_t len ) {
   // Easier to just always update this here rather than branch if unnecessary
   updateVidBufPtr( );
 
-  uint8_t charType;
-  uint8_t c;
   for ( uint16_t i = 0; i < len; i++ ) {
+#ifdef USE_UTF
+    uint8_t charType;
+    uint8_t c;
     bool isASCII = true;
     if ( buf[i] < 0x80 ) {
       c = buf[i];
@@ -768,42 +769,62 @@ void Screen::add( char *buf, uint16_t len ) {
       }
       c = nonPrintable;
       int j = (int)(utfcode & 0xff);
-      uint32_t msb = (uint32_t)(utfcode & 0xffffff00);
-      uint32_t *lookupPtr;
-      lookupPtr = transIndex[j];
-      uint32_t *endPtr;
-      endPtr = transIndex[j + 1];
-      while (lookupPtr < endPtr){
-        if ((uint32_t)((*lookupPtr) & 0xffffff00) == msb){
-          c = (uint8_t)((*lookupPtr) & 0xff);
+      uint16_t lookupIndex = transIndex[j];
+      uint16_t endIndex = transIndex[j + 1];
+      while (lookupIndex < endIndex){
+        if (transTable[lookupIndex].utfChar == utfcode){
+          c = transTable[lookupIndex].screenChar;
           break;
         }
-        lookupPtr++;
+        lookupIndex++;
       }
     }
+#else
+    uint8_t c = buf[i];
+#endif
     if ( c == 0 ) {         // Null char
       // Do nothing
     }
+#ifdef USE_UTF
     else if ( c == '\r' && isASCII ){ // Carriage Return
+#else
+    else if ( c == '\r' ){ // Carriage Return
+#endif
       cursor_x = 0;
       overhang = false;
       updateVidBufPtr( );
     }
+#ifdef USE_UTF
     else if ( c == '\n' && isASCII ) { // Line Feed
+#else
+    else if ( c == '\n' ) { // Line Feed
+#endif
       scroll( );
       overhang = false;
       updateVidBufPtr( );
     }
+#ifdef USE_UTF
     else if ( c == '\a' && isASCII ) { // Attention/Bell
+#else
+    else if ( c == '\a' ) { // Attention/Bell
+#endif
       sound(1000); delay(100); nosound( );
     }
+#ifdef USE_UTF
     else if ( c == '\t' && isASCII ) { // Tab
+#else
+    else if ( c == '\t' ) { // Tab
+#endif
       overhang = false;
       uint16_t newCursor_x = (cursor_x + 8) & 0xF8;
       if ( newCursor_x < terminalCols ) cursor_x = newCursor_x;
       updateVidBufPtr( );
     }
+#ifdef USE_UTF
     else if ( (c == 8 || c == 127) && isASCII ) { // Backspace or Delete Char
+#else
+    else if ( (c == 8 || c == 127) ) { // Backspace or Delete Char
+#endif
       if ( overhang == true ) {
         overhang = false;
       }

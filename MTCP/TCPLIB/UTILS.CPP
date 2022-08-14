@@ -665,6 +665,8 @@ int8_t Utils::getAppValue( const char *key, char *val, uint16_t valBufLen ) {
   return 1;
 }
 
+#ifdef USE_UTF
+
 int16_t Utils::getUtfValues( char *codePage, utfTrans *transTable, int mode ) {
 
   if ( fseek( CfgFile, 0, 0 ) ) return -1;
@@ -730,6 +732,7 @@ void Utils::sortUtfValues( utfTrans *transTable, int *tableLength ){
     }
   }
 }
+#endif
 
 // Utils::initStack
 //

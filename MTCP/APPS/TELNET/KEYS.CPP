@@ -36,7 +36,10 @@
 #include <bios.h>
 
 #include "keys.h"
-#include CFG_H
+
+uint8_t kKeyGet;
+uint8_t kKeyCheck;
+uint8_t kKeyFlags;
 
 Key_t getKey( void ) {
 
@@ -45,7 +48,7 @@ Key_t getKey( void ) {
   rc.local = 0;
   rc.normalKey = 0;
 
-  uint16_t c = bioskey(K_KEY_GET);
+  uint16_t c = bioskey(kKeyGet);
 
   // Special key?
   if ( (c & 0xff) == 0 ) {
