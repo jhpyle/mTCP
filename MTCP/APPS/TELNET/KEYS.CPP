@@ -86,12 +86,12 @@ Key_t getKey( void ) {
       case 0x2d: { rc.specialKey = K_Alt_X;           rc.local = 1;  break; }
       case 0x2e: { rc.specialKey = K_AltKey;   rc.normalKey = 0x63;  break; }
       case 0x2f: { rc.specialKey = K_AltKey;   rc.normalKey = 0x76;  break; }
+      case 0x30: { rc.specialKey = K_Alt_B;           rc.local = 1;  break; }
       case 0x31: { rc.specialKey = K_Alt_N;           rc.local = 1;  break; }
       case 0x32: { rc.specialKey = K_AltKey;   rc.normalKey = 0x6d;  break; }
       case 0x33: { rc.specialKey = K_AltKey;   rc.normalKey = 0x2c;  break; }
       case 0x34: { rc.specialKey = K_AltKey;   rc.normalKey = 0x2e;  break; }
       case 0x35: { rc.specialKey = K_AltKey;   rc.normalKey = 0x2f;  break; }
-      case 0x39: { rc.specialKey = K_Alt_B;           rc.local = 1;  break; }
       case 0x3B: { rc.specialKey = K_F1;                             break; }
       case 0x3C: { rc.specialKey = K_F2;                             break; }
       case 0x3D: { rc.specialKey = K_F3;                             break; }
