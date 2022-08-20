@@ -1,7 +1,8 @@
 wmake config=utf.h
 wmake patch
-ren telnet.exe telnet.tmp
+copy telnet.exe telnet.tmp
 wmake config=noutf.h
 wmake patch
-ren telnet.exe telnetnu.exe
-ren telnet.tmp telnet.exe
+copy telnet.exe telnetnu.exe
+copy telnet.tmp telnet.exe
+erase telnet.tmp
