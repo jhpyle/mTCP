@@ -92,10 +92,10 @@ characters.
 If you are connected to server that sends "extended ASCII" characters
 (codes greater than 127) with the expectation that your Telnet client
 will display them directly to video memory (e.g., as [Code Page 437]
-character), this Telnet client will misinterpret these codes as the
+character), `TELNET.EXE` will misinterpret these codes as the
 first byte of a Unicode sequence. Thus, you will get garbage on the
 screen. If you need to to connect to a server that sends "extended
-ASCII" characters, use the original mTCP.
+ASCII" characters, use `TELNETNU.EXE`.
 
 The [Code Page] and the default unprintable character are
 configurable in the `MTCP.CFG` file using the directives
