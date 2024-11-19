@@ -320,7 +320,7 @@ As discussed above, you will need to add `TELNET_HGC 1` or
 `TELNET_CGA 1` to your `MTCP.CFG` file if you have a [Hercules
 Graphics Card] or [CGA] adapter in your system.
 
-[EGA] is currently not supported, because I do not known an [EGA] card
+[EGA] is currently not supported, because I do not own an [EGA] card
 or [EGA]-compatible monitor.
 
 ## Performance
